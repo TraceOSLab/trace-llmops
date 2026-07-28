@@ -2,7 +2,6 @@
 .DS_Store
 .demo/
 .idea/
-.vscode/
 
 # 日志和环境
 *.log

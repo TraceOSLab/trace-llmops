@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Flask (app/http/app.py)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "flask",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "FLASK_APP": "app.http.app",
+        "FLASK_DEBUG": "1",
+        "PYTHONWARNINGS": "ignore::ImportWarning,ignore::UserWarning"
+      },
+      "args": ["run"],
+      "jinja": true
+    }
+  ]
+}

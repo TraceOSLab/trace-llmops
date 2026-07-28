@@ -1,0 +1,41 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "celery worker",
+      "type": "shell",
+      "command": "uv run celery -A app.http.app.celery worker --loglevel=info --logfile=storage/log/celery.log --pool=solo",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "db migrate",
+      "type": "shell",
+      "command": "uv run flask --app app.http.app db migrate",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "db upgrade",
+      "type": "shell",
+      "command": "uv run flask --app app.http.app db upgrade",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "db downgrade",
+      "type": "shell",
+      "command": "uv run flask --app app.http.app db downgrade",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    }
+  ]
+}
