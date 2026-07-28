@@ -22,15 +22,29 @@ dotenv.load_dotenv()
 # 加载配置
 conf = Config()
 
-app = Http(
-    __name__,
-    conf=conf,
-    db=injector.get(SQLAlchemy),
-    migrate=injector.get(Migrate),
-    middleware=injector.get(Middleware),
-    login_manager=injector.get(LoginManager),
-    router=injector.get(Router),
-)
+_app: Http | None = None
+
+
+def create_app() -> Http:
+    """Flask 工厂函数，延迟解析依赖注入链"""
+    global _app
+    if _app is not None:
+        return _app
+    _app = Http(
+        __name__,
+        conf=conf,
+        db=injector.get(SQLAlchemy),
+        migrate=injector.get(Migrate),
+        middleware=injector.get(Middleware),
+        login_manager=injector.get(LoginManager),
+        router=injector.get(Router),
+    )
+    return _app
+
+
+# 模块级 app 变量供非 CLI 场景使用（test/conftest.py 等）
+# Flask CLI 优先使用 create_app() 工厂函数
+app = create_app()
 
 celery = app.extensions["celery"]
 

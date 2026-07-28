@@ -15,6 +15,7 @@
 # 构建产物
 dist/
 build/
+docker/
 
 # python
 tmp/*

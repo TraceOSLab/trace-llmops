@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: always
+    container_name: ${PROJECT_NAME}-postgres
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    volumes:
+      - ./docker/data/postgres:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    container_name: ${PROJECT_NAME}-redis
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    command: redis-server --appendonly yes
+
+    volumes:
+      - ./docker/data/redis:/data
+
+  weaviate:
+    image: cr.weaviate.io/semitechnologies/weaviate:1.34.4
+    restart: always
+    container_name: ${PROJECT_NAME}-weaviate
+
+    ports:
+      - '${WEAVIATE_PORT:-8080}:8080'
+      - '50051:50051'
+
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: ${WEAVIATE_AUTH}
+      PERSISTENCE_DATA_PATH: /var/lib/weaviate
+      CLUSTER_HOSTNAME: node1
+
+    volumes:
+      - ./docker/data/weaviate:/var/lib/weaviate
