@@ -1,0 +1,8 @@
+- name: openai
+  label: OpenAI
+  description: OpenAI提供的模型，例如GPT-4o-mini和GPT-4o。
+  icon: icon.svg
+  background: '#E5E7EB'
+  supported_model_types:
+    - chat
+    - completion

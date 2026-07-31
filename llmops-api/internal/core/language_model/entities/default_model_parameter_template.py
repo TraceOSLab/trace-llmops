@@ -41,7 +41,7 @@ DEFAULT_MODEL_PARAMETER_TEMPLATE = {
         "required": False,
         "default": 0,
         "min": -2.0,
-        "max": 2.0,
+        "max": 2.0, 
         "precision": 2,
         "options": [],
     },

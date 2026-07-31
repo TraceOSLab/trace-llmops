@@ -11,7 +11,12 @@ from dataclasses import dataclass
 from flask_login import login_required, current_user
 from injector import inject
 
-from internal.schema.account_schema import GetCurrentUserResp, UpdateNameReq, UpdateAvatarReq, UpdatePasswordReq
+from internal.schema.account_schema import (
+    GetCurrentUserResp,
+    UpdateNameReq,
+    UpdateAvatarReq,
+    UpdatePasswordReq,
+)
 from internal.service import AccountService
 from pkg.response import success_json, validate_error_json
 
@@ -20,6 +25,7 @@ from pkg.response import success_json, validate_error_json
 @dataclass
 class AccountHandler:
     """账号管理处理器"""
+
     account_service: AccountService
 
     @login_required
