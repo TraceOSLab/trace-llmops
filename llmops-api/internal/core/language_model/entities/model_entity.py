@@ -75,7 +75,16 @@ class ModelEntity(BaseModel):
     )  # 模型元数据 存储模型额外数据
 
 
+class ModelFeature(str, Enum):
+    """模型特性，用于标记模型支持的特性信息，涵盖工具调用、智能体推理、图片输入"""
+
+    TOOL_CALL = "tool_call"  # 工具调用
+    AGENT_THOUGHT = "agent_thought"  # 是否支持智能体推理，一般要求参数量比较大，能回答通用型任务，如果不支持推理则会直接生成答案，而不进行中间步骤
+    IMAGE_INPUT = "image_input"  # 图片输入，多模态大语言模型
+
+
 class BaseLanguageModel(LCBaseLanguageModel, ABC):
     """基础语言模型"""
 
-    pass
+    features: list[ModelFeature] = Field(default_factory=list)  # 模型特性
+    metadata: dict[str, Any] = Field(default_factory=dict)  # 模型元数据信息
