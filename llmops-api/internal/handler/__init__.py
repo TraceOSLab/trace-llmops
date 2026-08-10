@@ -5,6 +5,7 @@
 @Time   :   2025/8/20 20:25
 @Author :   s.qiu@foxmail.com
 """
+
 from .account_handler import AccountHandler
 from .ai_handler import AIHandler
 from .api_key_handler import ApiKeyHandler
@@ -20,6 +21,7 @@ from .openapi_handler import OpenApiHandler
 from .segment_handler import SegmentHandler
 from .upload_file_handler import UploadFileHandler
 from .workflow_handler import WorkflowHandler
+from .language_model_handler import LanguageModelHandler
 
 __all__ = [
     "AuthHandler",
@@ -37,4 +39,5 @@ __all__ = [
     "ApiKeyHandler",
     "OpenApiHandler",
     "WorkflowHandler",
+    "LanguageModelHandler",
 ]

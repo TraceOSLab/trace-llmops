@@ -5,3 +5,7 @@
 @Time   :   2026/5/12 15:54
 @Author :   s.qiu@foxmail.com
 """
+
+from .language_model_manager import LanguageModelManager
+
+__all__ = ["LanguageModelManager"]

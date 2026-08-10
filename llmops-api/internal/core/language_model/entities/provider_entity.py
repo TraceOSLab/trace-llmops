@@ -6,8 +6,16 @@
 @Author :   s.qiu@foxmail.com
 """
 
-from typing import Any, Type, Union
+from encodings import utf_8
+import os
+from typing import Any, Optional, Type, Union
 
+import yaml
+
+from internal.core.language_model.entities.default_model_parameter_template import (
+    DEFAULT_MODEL_PARAMETER_TEMPLATE,
+)
+from internal.exception.exception import FailException, NotFoundException
 from internal.lib.helper import dynamic_import
 from pydantic import BaseModel, Field, model_validator
 
@@ -47,7 +55,8 @@ class Provider(BaseModel):
         # 服务提供商实体
         provider_entity: ProviderEntity = provider["provider_entity"]
 
-        # 动态导入服务 提供商的模型类
+        # 1. 构建模型类映射
+        # 动态导入服务
         for model_type in provider_entity["supported_model_types"]:
             symbol_name = model_type[0].upper() + model_type[1:]
             provider["model_class_map"][model_type] = dynamic_import(
@@ -55,8 +64,63 @@ class Provider(BaseModel):
                 symbol_name,
             )
 
+        # 2. 构建模型实体映射
         # 读取位置信息文件 获取模型名字
+        current_path = os.path.abspath(__file__)
+        entities_path = os.path.dirname(current_path)
+        provider_path = os.path.join(
+            os.path.dirname(entities_path), "providers", provider_entity.name
+        )
 
         # 根据位置信息名称 组装对应模型详细信息
+        positions_yaml_path = os.path.join(provider_path, "position.yaml")
+        with open(positions_yaml_path, encoding=utf_8) as f:
+            positions_yaml_data = yaml.safe_load(f) or []
+        if not isinstance(positions_yaml_data, list):
+            raise FailException("positions.yaml数据格式错误")
+
+        # 根据位置信息 读取模型名称 组装parameters部分
+        for model_name in positions_yaml_path:
+            model_yaml_path = os.path.join(provider_path, f"{model_name}.yaml")
+            with open(model_yaml_path, encoding=utf_8) as f:
+                model_yaml_data = yaml.safe_load(f)
+
+            # 处理模型的parameters部分 是否使用默认值填充
+            model_parameters = model_yaml_data.get("parameters")
+            parameters = []
+            for parameter in model_parameters:
+                use_template = parameter.get("use_template")
+                # 如果是用来默认值那就使用模板填充 否则直接填充
+                if use_template:
+                    default_parameter = DEFAULT_MODEL_PARAMETER_TEMPLATE.get(
+                        use_template
+                    )
+                    del parameter["use_template"]
+                    parameters.append({**default_parameter, **parameter})
+                else:
+                    parameters.append(parameter)
+
+            model_yaml_data["parameters"] = parameters
+            provider["model_entity_map"][model_name] = ModelEntity(**model_yaml_data)
 
         return provider
+
+    def get_model_class(
+        self, model_type: ModelType
+    ) -> Optional[Type[BaseLanguageModel]]:
+        """根据 模型类型获取该提供者的模型类"""
+        model_class = self.model_class_map.get(model_type, None)
+        if model_class is None:
+            raise NotFoundException("该模型类不存在")
+        return model_class
+
+    def get_model_entity(self, model_name: str) -> Optional[ModelEntity]:
+        """根据模型名称获取模型实体"""
+        model_entity = self.model_entity_map.get(model_name, None)
+        if model_entity is None:
+            raise NotFoundException("该模型实体不存在")
+        return model_entity
+
+    def get_model_entities(self) -> list[ModelEntity]:
+        """获取该提供商模型实体列表"""
+        return list(self.model_class_map.values())
