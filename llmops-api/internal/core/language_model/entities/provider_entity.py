@@ -124,4 +124,4 @@ class Provider(BaseModel):
 
     def get_model_entities(self) -> list[ModelEntity]:
         """获取该提供商模型实体列表"""
-        return list(self.model_class_map.values())
+        return list(self.model_entity_map.values())

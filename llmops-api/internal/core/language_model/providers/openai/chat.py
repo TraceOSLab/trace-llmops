@@ -6,8 +6,9 @@
 @Author : Youyou
 """
 
-from langchain_core.language_models import BaseLanguageModel
 from langchain_openai import ChatOpenAI
+
+from internal.core.language_model.entities.model_entity import BaseLanguageModel
 
 
 class Chat(ChatOpenAI, BaseLanguageModel):

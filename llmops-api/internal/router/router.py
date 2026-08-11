@@ -455,12 +455,12 @@ class Router:
             view_func=self.language_model_handler.get_language_models,
         )
         bp.add_url_rule(
-            "/language-models/<string:provider_name>/icon",
-            view_func=self.language_model_handler.get_language_model_icon,
-        )
-        bp.add_url_rule(
             "/language-models/<string:provider_name>/<string:model_name>",
             view_func=self.language_model_handler.get_language_model,
+        )
+        bp.add_url_rule(
+            "/language-models/<string:provider_name>/icon",
+            view_func=self.language_model_handler.get_language_model_icon,
         )
 
         # 在应用上注册蓝图
