@@ -57,13 +57,13 @@ class Provider(BaseModel):
 
         # 1. 构建模型类映射
         # 动态导入服务
-        # for model_type in provider_entity.supported_model_types:
-        #     symbol_name = model_type[0].upper() + model_type[1:]
+        for model_type in provider_entity.supported_model_types:
+            symbol_name = model_type[0].upper() + model_type[1:]
 
-        #     self.model_class_map[model_type] = dynamic_import(
-        #         f"internal.core.language_model.providers.{provider_entity.name}.{model_type}",
-        #         symbol_name,
-        #     )
+            self.model_class_map[model_type] = dynamic_import(
+                f"internal.core.language_model.providers.{provider_entity.name}.{model_type.value}",
+                symbol_name,
+            )
 
         # 2. 构建模型实体映射
         # 读取位置信息文件 获取模型名字
