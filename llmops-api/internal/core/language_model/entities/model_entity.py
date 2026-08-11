@@ -60,12 +60,21 @@ class ModelParameter(BaseModel):
     options: list[ModelParameterOption] = Field(default_factory=list)  # 选项数据源
 
 
+class ModelFeature(str, Enum):
+    """模型特性，用于标记模型支持的特性信息，涵盖工具调用、智能体推理、图片输入"""
+
+    TOOL_CALL = "tool_call"  # 工具调用
+    AGENT_THOUGHT = "agent_thought"  # 是否支持智能体推理，一般要求参数量比较大，能回答通用型任务，如果不支持推理则会直接生成答案，而不进行中间步骤
+    IMAGE_INPUT = "image_input"  # 图片输入，多模态大语言模型
+
+
 class ModelEntity(BaseModel):
     """语言模型实体 模型相关信息"""
 
     model_name: str = Field(default="", alias="model")  # 模型名称
     label: str = Field(default="", alias="label")  # 模型标签
     model_type: ModelType = ModelType.CHAT  # 模型类型
+    features: list[ModelFeature] = Field(default_factory=list)  # 模型特征信息
     context_window: int = 0  # 上下文窗口长度（输入+输出）
     max_output_tokens: int = 0  # 最大输出token数（输出）
     attributes: dict[str, Any] = Field(default_factory=dict)  # 模型属性
@@ -73,14 +82,6 @@ class ModelEntity(BaseModel):
     metadata: dict[str, Any] = Field(
         default_factory=dict
     )  # 模型元数据 存储模型额外数据
-
-
-class ModelFeature(str, Enum):
-    """模型特性，用于标记模型支持的特性信息，涵盖工具调用、智能体推理、图片输入"""
-
-    TOOL_CALL = "tool_call"  # 工具调用
-    AGENT_THOUGHT = "agent_thought"  # 是否支持智能体推理，一般要求参数量比较大，能回答通用型任务，如果不支持推理则会直接生成答案，而不进行中间步骤
-    IMAGE_INPUT = "image_input"  # 图片输入，多模态大语言模型
 
 
 class BaseLanguageModel(LCBaseLanguageModel, ABC):

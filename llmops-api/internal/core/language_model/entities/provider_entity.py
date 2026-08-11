@@ -48,21 +48,22 @@ class Provider(BaseModel):
         default_factory=dict
     )  # 模型类映射
 
-    @model_validator(pre=False)
-    def validate_provider(cls, provider: dict[str, Any]) -> dict[str, Any]:
+    @model_validator(mode="after")
+    def validate_provider(self) -> dict[str, Any]:
         """校验器 完成服务提供者的实体与类实例化"""
 
         # 服务提供商实体
-        provider_entity: ProviderEntity = provider["provider_entity"]
+        provider_entity: ProviderEntity = self.provider_entity
 
         # 1. 构建模型类映射
         # 动态导入服务
-        for model_type in provider_entity["supported_model_types"]:
-            symbol_name = model_type[0].upper() + model_type[1:]
-            provider["model_class_map"][model_type] = dynamic_import(
-                f"internal.core.language_model.providers.{provider_entity.name}.{model_type}",
-                symbol_name,
-            )
+        # for model_type in provider_entity.supported_model_types:
+        #     symbol_name = model_type[0].upper() + model_type[1:]
+
+        #     self.model_class_map[model_type] = dynamic_import(
+        #         f"internal.core.language_model.providers.{provider_entity.name}.{model_type}",
+        #         symbol_name,
+        #     )
 
         # 2. 构建模型实体映射
         # 读取位置信息文件 获取模型名字
@@ -73,16 +74,16 @@ class Provider(BaseModel):
         )
 
         # 根据位置信息名称 组装对应模型详细信息
-        positions_yaml_path = os.path.join(provider_path, "position.yaml")
-        with open(positions_yaml_path, encoding=utf_8) as f:
+        positions_yaml_path = os.path.join(provider_path, "positions.yaml")
+        with open(positions_yaml_path, encoding="utf_8") as f:
             positions_yaml_data = yaml.safe_load(f) or []
         if not isinstance(positions_yaml_data, list):
             raise FailException("positions.yaml数据格式错误")
 
         # 根据位置信息 读取模型名称 组装parameters部分
-        for model_name in positions_yaml_path:
+        for model_name in positions_yaml_data:
             model_yaml_path = os.path.join(provider_path, f"{model_name}.yaml")
-            with open(model_yaml_path, encoding=utf_8) as f:
+            with open(model_yaml_path, encoding="utf_8") as f:
                 model_yaml_data = yaml.safe_load(f)
 
             # 处理模型的parameters部分 是否使用默认值填充
@@ -101,9 +102,9 @@ class Provider(BaseModel):
                     parameters.append(parameter)
 
             model_yaml_data["parameters"] = parameters
-            provider["model_entity_map"][model_name] = ModelEntity(**model_yaml_data)
+            self.model_entity_map[model_name] = ModelEntity(**model_yaml_data)
 
-        return provider
+        return self
 
     def get_model_class(
         self, model_type: ModelType

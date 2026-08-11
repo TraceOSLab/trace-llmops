@@ -7,7 +7,6 @@
 """
 
 from flask import current_app
-import sqlalchemy
 from typing import Any
 from internal.core.language_model import LanguageModelManager
 from internal.exception.exception import NotFoundException
@@ -16,6 +15,7 @@ from injector import inject
 from dataclasses import dataclass
 import os
 import mimetypes
+from pkg.sqlalchemy import SQLAlchemy
 
 
 @inject
@@ -23,7 +23,7 @@ import mimetypes
 class LanguageModelService(BaseService):
     """语言模型服务"""
 
-    db: sqlalchemy
+    db: SQLAlchemy
     language_model_manager: LanguageModelManager
 
     def get_language_models(self) -> list[dict[str, Any]]:

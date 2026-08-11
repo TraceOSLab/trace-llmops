@@ -8,6 +8,7 @@
 
 from typing import Any, Optional, Type
 import os
+from injector import inject, singleton
 from pydantic import BaseModel, Field, model_validator
 import yaml
 
@@ -16,13 +17,15 @@ from .entities.provider_entity import Provider, ProviderEntity
 from .entities.model_entity import ModelType, BaseLanguageModel
 
 
+@inject
+@singleton
 class LanguageModelManager(BaseModel):
     """语言模型管理器"""
 
     provider_map: dict[str, Provider] = Field(default_factory=dict)
 
-    @model_validator(pre=False)
-    def validate_language_model_manager(clas, values: dict[str, Any]) -> dict[str, Any]:
+    @model_validator(mode="after")
+    def validate_language_model_manager(self) -> dict[str, Any]:
         """预设规则校验 对管理器进行初始化"""
         current_path = os.path.abspath(__file__)
         providers_path = os.path.join(os.path.dirname(current_path), "providers")
@@ -30,19 +33,19 @@ class LanguageModelManager(BaseModel):
 
         # 读取 providers.yaml 获取提供商列表
         with open(providers_yaml_path, encoding="utf-8") as f:
-            providers_yaml_data = yaml.safe_load()
+            providers_yaml_data = yaml.safe_load(f)
 
-        values["provider_map"] = []
+        self.provider_map = {}
         for index, provider_yaml_data in enumerate(providers_yaml_data):
             # 构建提供商实体
             provider_entity = ProviderEntity(**provider_yaml_data)
-            values["provider_map"][provider_entity.name] = Provider(
+            self.provider_map[provider_entity.name] = Provider(
                 name=provider_entity.name,
                 position=index + 1,
                 provider_entity=provider_entity,
             )
 
-        return values
+        return self
 
     def get_providers(self) -> list[Provider]:
         """获取所有提供者列表信息"""
