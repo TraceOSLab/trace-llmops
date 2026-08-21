@@ -42,7 +42,9 @@ class DocumentHandler:
             return validate_error_json(req.errors)
 
         # 调用服务并创建文档 返回文档列表+处理批次
-        document, batch = self.document_service.create_documents(dataset_id, **req.data, account=current_user)
+        document, batch = self.document_service.create_documents(
+            dataset_id, **req.data, account=current_user
+        )
 
         resp = CreateDocumentResp()
         return success_json(resp.dump((document, batch)))

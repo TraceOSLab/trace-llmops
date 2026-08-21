@@ -1,3 +1,5 @@
 {
-  "python.languageServer": "Default"
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv",
+  "python.languageServer": "Default",
+  "python.terminal.activateEnvironment": true
 }

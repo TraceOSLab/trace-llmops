@@ -3,17 +3,40 @@
   "tasks": [
     {
       "label": "celery worker",
-      "type": "shell",
-      "command": "uv run celery -A app.http.app.celery worker --loglevel=info --logfile=storage/log/celery.log --pool=solo",
+      "type": "process",
+      "command": "uv",
+      "args": [
+        "run",
+        "celery",
+        "-A",
+        "app.http.app:celery",
+        "worker",
+        "--loglevel=INFO",
+        "--pool=solo"
+      ],
       "options": {
         "cwd": "${workspaceFolder}"
       },
-      "problemMatcher": []
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
     },
     {
       "label": "db migrate",
-      "type": "shell",
-      "command": "uv run flask --app app.http.app db migrate",
+      "type": "process",
+      "command": "uv",
+      "args": [
+        "run",
+        "flask",
+        "--app",
+        "app.http.app:create_app",
+        "db",
+        "migrate",
+        "-m",
+        "${input:migrationMessage}"
+      ],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -21,8 +44,16 @@
     },
     {
       "label": "db upgrade",
-      "type": "shell",
-      "command": "uv run flask --app app.http.app db upgrade",
+      "type": "process",
+      "command": "uv",
+      "args": [
+        "run",
+        "flask",
+        "--app",
+        "app.http.app:create_app",
+        "db",
+        "upgrade"
+      ],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -30,12 +61,34 @@
     },
     {
       "label": "db downgrade",
-      "type": "shell",
-      "command": "uv run flask --app app.http.app db downgrade",
+      "type": "process",
+      "command": "uv",
+      "args": [
+        "run",
+        "flask",
+        "--app",
+        "app.http.app:create_app",
+        "db",
+        "downgrade",
+        "${input:downgradeRevision}"
+      ],
       "options": {
         "cwd": "${workspaceFolder}"
       },
       "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "migrationMessage",
+      "type": "promptString",
+      "description": "Migration message"
+    },
+    {
+      "id": "downgradeRevision",
+      "type": "promptString",
+      "description": "Target revision (for example: -1)",
+      "default": "-1"
     }
   ]
 }

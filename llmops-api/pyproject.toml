@@ -40,6 +40,7 @@ dependencies = [
     "tiktoken==0.11.0",
     "torch==2.9.1",
     "transformers==4.57.3",
+    "unstructured[md]>=0.25.2",
     "weaviate-client==4.19.0",
     "werkzeug==3.1.8",
     "wtforms==3.2.2",

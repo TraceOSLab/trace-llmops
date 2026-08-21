@@ -2,18 +2,48 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Flask (app/http/app.py)",
+      "name": "Flask API",
       "type": "debugpy",
       "request": "launch",
       "module": "flask",
       "cwd": "${workspaceFolder}",
       "env": {
-        "FLASK_APP": "app.http.app",
-        "FLASK_DEBUG": "1",
         "PYTHONWARNINGS": "ignore::ImportWarning,ignore::UserWarning"
       },
-      "args": ["run"],
-      "jinja": true
+      "args": [
+        "--app",
+        "app.http.app:create_app",
+        "run",
+        "--debug",
+        "--no-debugger",
+        "--no-reload"
+      ],
+      "jinja": true,
+      "justMyCode": true,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Celery Worker",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "celery",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "-A",
+        "app.http.app:celery",
+        "worker",
+        "--loglevel=INFO",
+        "--pool=solo"
+      ],
+      "justMyCode": true,
+      "console": "integratedTerminal"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Development (Flask + Celery)",
+      "configurations": ["Flask API", "Celery Worker"],
+      "stopAll": true
     }
   ]
 }

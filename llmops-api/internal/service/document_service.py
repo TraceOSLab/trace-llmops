@@ -5,6 +5,7 @@
 @Time   :   2025/12/22 21:05
 @Author :   s.qiu@foxmail.com
 """
+
 import logging
 import random
 import time
@@ -22,7 +23,11 @@ from internal.entity.upload_file_entity import ALLOWED_DOCUMENT_EXTENSION
 from internal.exception import ForbiddenException, FailException, NotFoundException
 from internal.lib.helper import datetime_to_timestamp
 from internal.model import Document, Dataset, UploadFile, ProcessRule, Segment, Account
-from internal.task.document_task import build_documents, update_document_enabled, delete_document
+from internal.task.document_task import (
+    build_documents,
+    update_document_enabled,
+    delete_document,
+)
 from pkg.paginator import Paginator
 from pkg.sqlalchemy import SQLAlchemy
 from .base_service import BaseService
@@ -32,16 +37,18 @@ from .base_service import BaseService
 @dataclass
 class DocumentService(BaseService):
     """文档服务"""
+
     db: SQLAlchemy
     redis_client: Redis
 
-    def create_documents(self,
-                         dataset_id: UUID,
-                         upload_file_ids: list[UUID],
-                         process_type: str = ProcessType.AUTOMATIC,
-                         rule: dict = None,
-                         account: Account = None,
-                         ) -> tuple[list[Document], str]:
+    def create_documents(
+        self,
+        dataset_id: UUID,
+        upload_file_ids: list[UUID],
+        process_type: str = ProcessType.AUTOMATIC,
+        rule: dict = None,
+        account: Account = None,
+    ) -> tuple[list[Document], str]:
         """创建文档列表 调用异步任务"""
 
         dataset = self.get(Dataset, dataset_id)
@@ -49,18 +56,25 @@ class DocumentService(BaseService):
             raise ForbiddenException("知识库不存在或无权限")
 
         # 提取文件并校验文件权限与扩展
-        upload_files = self.db.session.query(UploadFile).filter(
-            UploadFile.account_id == account.id,
-            UploadFile.id.in_(upload_file_ids)
-        ).all()
+        upload_files = (
+            self.db.session.query(UploadFile)
+            .filter(
+                UploadFile.account_id == account.id, UploadFile.id.in_(upload_file_ids)
+            )
+            .all()
+        )
 
         # 保存允许处理的类型
-        upload_files = [upload_file for upload_file in upload_files if
-                        upload_file.extension.lower() in ALLOWED_DOCUMENT_EXTENSION]
+        upload_files = [
+            upload_file
+            for upload_file in upload_files
+            if upload_file.extension.lower() in ALLOWED_DOCUMENT_EXTENSION
+        ]
 
         if len(upload_files) == 0:
             logging.warning(
-                f"上传文档列表未解析到合法文件，account_id: {account.id}, dataset_id: {dataset_id}, upload_file_ids: {upload_file_ids}")
+                f"上传文档列表未解析到合法文件，account_id: {account.id}, dataset_id: {dataset_id}, upload_file_ids: {upload_file_ids}"
+            )
             raise FailException("未解析到合法文件")
 
         # 创建批次与处理规则并记录数据库
@@ -98,7 +112,9 @@ class DocumentService(BaseService):
         # 返回文档列表与处理批次
         return documents, batch
 
-    def get_documents_with_page(self, dataset_id: UUID, req, account: Account) -> tuple[list[Document], Paginator]:
+    def get_documents_with_page(
+        self, dataset_id: UUID, req, account: Account
+    ) -> tuple[list[Document], Paginator]:
         """获取指定知识库的文档分页列表"""
 
         dataset = self.get(Dataset, dataset_id)
@@ -114,11 +130,16 @@ class DocumentService(BaseService):
         ]
         if req.search_word.data:
             filters.append(Document.name.ilike(f"%{req.search_word.data}%"))
-        documents = paginator.paginate(self.db.session.query(Document).filter(*filters).
-                                       order_by(desc("created_at")))
+        documents = paginator.paginate(
+            self.db.session.query(Document)
+            .filter(*filters)
+            .order_by(desc("created_at"))
+        )
         return documents, paginator
 
-    def get_document(self, dataset_id: UUID, document_id: UUID, account: Account) -> Document:
+    def get_document(
+        self, dataset_id: UUID, document_id: UUID, account: Account
+    ) -> Document:
         """获取指定知识库下指定文档信息"""
 
         document = self.get(Document, document_id)
@@ -129,7 +150,9 @@ class DocumentService(BaseService):
 
         return document
 
-    def update_document(self, dataset_id: UUID, document_id: UUID, account: Account, **kwargs) -> Document:
+    def update_document(
+        self, dataset_id: UUID, document_id: UUID, account: Account, **kwargs
+    ) -> Document:
         """更新指定知识库下指定文档信息"""
 
         document = self.get(Document, document_id)
@@ -140,8 +163,9 @@ class DocumentService(BaseService):
 
         return self.update(document, **kwargs)
 
-    def update_document_enabled(self, dataset_id: UUID, document_id: UUID,
-                                enabled: bool, account: Account) -> Document:
+    def update_document_enabled(
+        self, dataset_id: UUID, document_id: UUID, enabled: bool, account: Account
+    ) -> Document:
         """更新指定知识库下指定文档启用状态"""
 
         document = self.get(Document, document_id)
@@ -163,7 +187,9 @@ class DocumentService(BaseService):
             raise FailException("当前文档正在修改状态，请稍后重试。")
 
         # 更新文档
-        self.update(document, enabled=enabled, disabled_at=None if enabled else datetime.now())
+        self.update(
+            document, enabled=enabled, disabled_at=None if enabled else datetime.now()
+        )
         self.redis_client.setex(cache_key, LOCK_EXPIRE_TIME, 1)
 
         # 启用异步任务完成 关键词 片段 向量等修改
@@ -171,7 +197,9 @@ class DocumentService(BaseService):
 
         return document
 
-    def delete_document(self, dataset_id: UUID, document_id: UUID, account: Account) -> Document:
+    def delete_document(
+        self, dataset_id: UUID, document_id: UUID, account: Account
+    ) -> Document:
         """删除指定知识库下指定文档"""
 
         document = self.get(Document, document_id)
@@ -187,7 +215,9 @@ class DocumentService(BaseService):
         delete_document.delay(dataset_id, document_id)
         return document
 
-    def get_documents_status(self, dataset_id: UUID, batch: str, account: Account) -> list[dict]:
+    def get_documents_status(
+        self, dataset_id: UUID, batch: str, account: Account
+    ) -> list[dict]:
         """根据批次获取该文档处理状态"""
 
         dataset = self.get(Dataset, dataset_id)
@@ -195,59 +225,75 @@ class DocumentService(BaseService):
             raise ForbiddenException("知识库不存在或无权限")
 
         # 获取该批次文档列表
-        documents = self.db.session.query(Document).filter(
-            Document.dataset_id == dataset.id,
-            Document.batch == batch,
-        ).order_by(asc("position")).all()
+        documents = (
+            self.db.session.query(Document)
+            .filter(
+                Document.dataset_id == dataset.id,
+                Document.batch == batch,
+            )
+            .order_by(asc("position"))
+            .all()
+        )
 
         if documents is None or len(documents) == 0:
             raise NotFoundException("该处理批次未发现文档")
 
         document_status = []
         for document in documents:
-            segment_count = self.db.session.query(func.count(Segment.id)).filter(
-                Segment.document_id == document.id,
-            ).scalar()
+            segment_count = (
+                self.db.session.query(func.count(Segment.id))
+                .filter(
+                    Segment.document_id == document.id,
+                )
+                .scalar()
+            )
 
-            completed_segment_count = self.db.session.query(func.count(Segment.id)).filter(
-                Segment.document_id == document.id,
-                Segment.status == SegmentStatus.COMPLETED,
-            ).scalar()
+            completed_segment_count = (
+                self.db.session.query(func.count(Segment.id))
+                .filter(
+                    Segment.document_id == document.id,
+                    Segment.status == SegmentStatus.COMPLETED,
+                )
+                .scalar()
+            )
 
             upload_file = document.upload_file
-            document_status.append({
-                "id": document.id,
-                "name": document.name,
-                "size": upload_file.size,
-                "extension": upload_file.extension,
-                "mime_type": upload_file.mime_type,
-                "position": document.position,
-                "segment_count": segment_count,
-                "completed_segment_count": completed_segment_count,
-                "error": document.error,
-                "status": document.status,
-                "processing_started_at": datetime_to_timestamp(
-                    document.processing_started_at
-                ),
-                "parsing_completed_at": datetime_to_timestamp(
-                    document.parsing_completed_at
-                ),
-                "splitting_completed_at": datetime_to_timestamp(
-                    document.splitting_completed_at
-                ),
-                "indexing_completed_at": datetime_to_timestamp(
-                    document.indexing_completed_at
-                ),
-                "completed_at": datetime_to_timestamp(document.completed_at),
-                "stopped_at": datetime_to_timestamp(document.stopped_at),
-                "created_at": datetime_to_timestamp(document.created_at),
-            })
+            document_status.append(
+                {
+                    "id": document.id,
+                    "name": document.name,
+                    "size": upload_file.size,
+                    "extension": upload_file.extension,
+                    "mime_type": upload_file.mime_type,
+                    "position": document.position,
+                    "segment_count": segment_count,
+                    "completed_segment_count": completed_segment_count,
+                    "error": document.error,
+                    "status": document.status,
+                    "processing_started_at": datetime_to_timestamp(
+                        document.processing_started_at
+                    ),
+                    "parsing_completed_at": datetime_to_timestamp(
+                        document.parsing_completed_at
+                    ),
+                    "splitting_completed_at": datetime_to_timestamp(
+                        document.splitting_completed_at
+                    ),
+                    "indexing_completed_at": datetime_to_timestamp(
+                        document.indexing_completed_at
+                    ),
+                    "completed_at": datetime_to_timestamp(document.completed_at),
+                    "stopped_at": datetime_to_timestamp(document.stopped_at),
+                    "created_at": datetime_to_timestamp(document.created_at),
+                }
+            )
         return document_status
 
     def get_latest_document_position(self, dataset_id: UUID) -> int:
         """获取该知识库最新文档位置"""
         document = (
-            self.db.session.query(Document).filter(Document.dataset_id == dataset_id)
+            self.db.session.query(Document)
+            .filter(Document.dataset_id == dataset_id)
             .order_by(desc("position"))
             .first()
         )
