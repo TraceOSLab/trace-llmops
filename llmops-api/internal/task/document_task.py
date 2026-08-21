@@ -15,8 +15,12 @@ def build_documents(document_ids: list[UUID]) -> None:
     """根据传递额文档id列表 构建文档"""
     from app.http.module import injector
     from internal.service import IndexingService
+
     indexing_service = injector.get(IndexingService)
-    indexing_service.build_documents(document_ids)
+    try:
+        indexing_service.build_documents(document_ids)
+    finally:
+        indexing_service.vector_database_service.close()
 
 
 @shared_task
@@ -26,7 +30,10 @@ def update_document_enabled(document_id: UUID) -> None:
     from internal.service.indexing_service import IndexingService
 
     indexing_service = injector.get(IndexingService)
-    indexing_service.update_document_enabled(document_id)
+    try:
+        indexing_service.update_document_enabled(document_id)
+    finally:
+        indexing_service.vector_database_service.close()
 
 
 @shared_task
@@ -36,4 +43,7 @@ def delete_document(dataset_id: UUID, document_id: UUID) -> None:
     from internal.service.indexing_service import IndexingService
 
     indexing_service = injector.get(IndexingService)
-    indexing_service.delete_document(dataset_id, document_id)
+    try:
+        indexing_service.delete_document(dataset_id, document_id)
+    finally:
+        indexing_service.vector_database_service.close()

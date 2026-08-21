@@ -18,9 +18,11 @@
 cp .env.example .env
 cp llmops-api/.env.example llmops-api/.env
 docker compose up -d
+cd llmops-api
+uv sync --locked
 ```
 
-`.env.example` 只用于了解配置项。不要把真实密钥提交到仓库，也不要让 Codex 读取或输出 `.env`。
+`.env.example` 只用于了解配置项。不要把真实密钥提交到仓库，也不要让 Codex 读取或输出 `.env`。项目通过 `.python-version` 选择 Python 3.11，并要求 uv 0.12.5 或更高版本。
 
 随后在 VS Code 中执行 **Python: Select Interpreter**，选择：
 
@@ -137,6 +139,35 @@ uv run pytest
 - 测试产生的数据可安全清理。
 
 仓库目前没有统一 Ruff、类型检查、CI 或隔离的集成测试环境。需要这些能力时，应作为独立学习任务逐项加入，不把它们写成已经存在的命令。
+
+## Python 依赖维护
+
+- `pyproject.toml` 只声明项目的直接运行依赖；测试工具等本地开发依赖放入 `[dependency-groups].dev`；
+- `uv.lock` 锁定完整的直接和间接依赖树，必须和 `pyproject.toml` 一起提交；
+- `uv sync` 默认包含 `dev` group；只安装运行依赖时使用 `uv sync --no-dev`；
+- 不再手工维护 `requirements.txt`，也不要直接使用 `.venv/bin/pip install` 修改项目环境；
+- 增删依赖优先使用 `uv add`、`uv add --dev` 和 `uv remove`，让 uv 同步更新声明和锁文件。
+
+依赖变更后的最小检查：
+
+```bash
+uv lock --check
+uv sync --locked --dry-run
+uv pip check
+```
+
+精确 `uv sync` 会删除未声明的包。这是预期行为，可以及时发现只存在于某位开发者本机、却没有记录到项目中的旧 `pip install` 依赖。
+
+当前文档解析代码支持 CSV、Markdown、PDF、PPT/PPTX 和 XLS/XLSX，相应 Unstructured extras 已写入项目依赖。Unstructured 还建议为完整的 PDF、图片和旧版 Office 支持安装 `libmagic`、Poppler、Tesseract 和 LibreOffice；它们是操作系统依赖，不会出现在 `uv.lock` 中。
+
+本地嵌入模型同样不属于 Python 依赖，`internal/core/embeddings/` 也被 Git 忽略。首次使用文档索引前需要联网把模型及其自定义实现下载到应用使用的缓存目录：
+
+```bash
+uv run hf download Alibaba-NLP/gte-multilingual-base --cache-dir internal/core/embeddings
+uv run hf download Alibaba-NLP/new-impl --cache-dir internal/core/embeddings
+```
+
+`EmbeddingsService` 当前设置了 `local_files_only=True`，所以运行期间不会自动补下载；部署和离线环境应在启动 Worker 前完成模型准备。
 
 ## 数据库迁移
 

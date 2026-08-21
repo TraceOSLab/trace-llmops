@@ -13,7 +13,7 @@ cp .env.example .env
 uv sync --locked
 ```
 
-真实配置和密钥只保存在本地 `.env`，不要提交到仓库。
+项目要求 uv 0.12.5 或更高版本。`uv sync --locked` 会严格按已提交的 `uv.lock` 创建 `.venv`，并默认安装 `dev` dependency group 中的测试工具。真实配置和密钥只保存在本地 `.env`，不要提交到仓库。
 
 返回仓库根目录；如果根目录还没有 `.env`，同样先从示例创建，然后启动 PostgreSQL、Redis 和 Weaviate：
 
@@ -44,3 +44,34 @@ uv run celery -A app.http.app:celery worker --loglevel=INFO --pool=solo
 ```
 
 `--pool=solo` 用于本地开发和断点调试，不代表生产环境的并发部署方式。
+
+## 依赖维护
+
+`pyproject.toml` 是直接依赖的声明来源，`uv.lock` 是可复现安装的完整锁文件；不再维护手写的 `requirements.txt`。
+
+```bash
+# 增加或删除运行依赖
+uv add <package>
+uv remove <package>
+
+# 增加开发依赖
+uv add --dev <package>
+
+# 提交前检查声明、锁文件和环境是否一致
+uv lock --check
+uv sync --locked --dry-run
+uv pip check
+```
+
+修改依赖后应同时提交 `pyproject.toml` 和 `uv.lock`。不要用 `.venv/bin/pip install` 临时补包，否则该包不会进入项目声明，并可能在下一次精确同步时被删除。
+
+文档解析还依赖操作系统工具。为完整支持 PDF、图片和旧版 Office 文件，请根据系统安装 `libmagic`、Poppler、Tesseract 和 LibreOffice；这些工具不由 uv 管理。
+
+嵌入模型也不是 Python 包，不会进入 `uv.lock`，并且模型缓存目录不会提交到 Git。首次使用本地嵌入前需要联网执行：
+
+```bash
+uv run hf download Alibaba-NLP/gte-multilingual-base --cache-dir internal/core/embeddings
+uv run hf download Alibaba-NLP/new-impl --cache-dir internal/core/embeddings
+```
+
+应用以 `local_files_only` 模式加载模型，因此部署或离线开发环境必须提前准备这两个缓存。
