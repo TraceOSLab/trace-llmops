@@ -5,6 +5,7 @@
 @Time   :   2025/9/1
 @Author :   s.qiu@foxmail.com
 """
+
 import json
 from dataclasses import dataclass
 from queue import Queue
@@ -24,19 +25,36 @@ from langgraph.constants import END
 from langgraph.graph import MessagesState, StateGraph
 
 from internal.core.tools.builtin_tools.providers import BuiltinProviderManager
-from internal.schema.app_schema import CompletionReq, CreateAppReq, GetAppResp, GetPublishHistoriesWithPageReq, \
-    GetPublishHistoriesWithPageResp, FallbackHistoryToDraftReq, UpdateDebugConversationSummaryReq, UpdateAppReq, \
-    DebugChatReq, GetDebugConversationMessagesWithPageReq, GetDebugConversationMessagesWithPageResp, GetAppsWithPageReq, \
-    GetAppsWithPageResp
+from internal.schema.app_schema import (
+    CompletionReq,
+    CreateAppReq,
+    GetAppResp,
+    GetPublishHistoriesWithPageReq,
+    GetPublishHistoriesWithPageResp,
+    FallbackHistoryToDraftReq,
+    UpdateDebugConversationSummaryReq,
+    UpdateAppReq,
+    DebugChatReq,
+    GetDebugConversationMessagesWithPageReq,
+    GetDebugConversationMessagesWithPageResp,
+    GetAppsWithPageReq,
+    GetAppsWithPageResp,
+)
 from internal.service import AppService, VectorDatabaseService, ConversationService
 from pkg.paginator import PageModel
-from pkg.response import validate_error_json, success_json, success_message, compact_generate_response
+from pkg.response import (
+    validate_error_json,
+    success_json,
+    success_message,
+    compact_generate_response,
+)
 
 
 @inject
 @dataclass
 class AppHandler:
     """应用控制器"""
+
     app_service: AppService
     vector_database_service: VectorDatabaseService
     builtin_provider_manager: BuiltinProviderManager
@@ -119,15 +137,21 @@ class AppHandler:
         req = FallbackHistoryToDraftReq()
         if not req.validate():
             return validate_error_json(req.errors)
-        self.app_service.fallback_history_to_draft(app_id, req.app_config_version_id.data, current_user)
+        self.app_service.fallback_history_to_draft(
+            app_id, req.app_config_version_id.data, current_user
+        )
         return success_message("已回退版本配置到草稿")
 
     @login_required
     def get_publish_histories_with_page(self, app_id: UUID):
         req = GetPublishHistoriesWithPageReq(request.args)
-        app_config_versions, paginator = self.app_service.get_publish_histories_with_page(app_id, req, current_user)
+        app_config_versions, paginator = (
+            self.app_service.get_publish_histories_with_page(app_id, req, current_user)
+        )
         resp = GetPublishHistoriesWithPageResp(many=True)
-        return success_json(PageModel(list=resp.dump(app_config_versions), paginator=paginator))
+        return success_json(
+            PageModel(list=resp.dump(app_config_versions), paginator=paginator)
+        )
 
     @login_required
     def get_debug_conversation_summary(self, app_id: UUID):
@@ -141,7 +165,9 @@ class AppHandler:
         req = UpdateDebugConversationSummaryReq()
         if not req.validate():
             raise validate_error_json(req.errors)
-        self.app_service.update_debug_conversation_summary(app_id, req.summary.data, current_user)
+        self.app_service.update_debug_conversation_summary(
+            app_id, req.summary.data, current_user
+        )
         return success_message("更新长期记忆成功")
 
     @login_required
@@ -156,15 +182,21 @@ class AppHandler:
         # 加载记忆
         configurable = config.get("configurable", {})
         configurable_memory = configurable.get("memory")
-        if configurable_memory is not None and isinstance(configurable_memory, BaseMemory):
+        if configurable_memory is not None and isinstance(
+            configurable_memory, BaseMemory
+        ):
             configurable_memory.save_context(run_obj.inputs, run_obj.outputs)
 
     @classmethod
-    def _load_memory_variables(cls, input: Dict[str, Any], config: RunnableConfig) -> Dict[str, Any]:
+    def _load_memory_variables(
+        cls, input: Dict[str, Any], config: RunnableConfig
+    ) -> Dict[str, Any]:
         """加载记忆变量信息"""
         configurable = config.get("configurable", {})
         configurable_memory = configurable.get("memory")
-        if configurable_memory is not None and isinstance(configurable_memory, BaseMemory):
+        if configurable_memory is not None and isinstance(
+            configurable_memory, BaseMemory
+        ):
             return configurable_memory.load_memory_variables(input)
         return {"history": []}
 
@@ -174,7 +206,11 @@ class AppHandler:
         req = GetDebugConversationMessagesWithPageReq(request.args)
         if not req.validate():
             return validate_error_json(req.errors)
-        messages, paginator = self.app_service.get_debug_conversation_messages_with_page(app_id, req, current_user)
+        messages, paginator = (
+            self.app_service.get_debug_conversation_messages_with_page(
+                app_id, req, current_user
+            )
+        )
         resp = GetDebugConversationMessagesWithPageResp(many=True)
         return success_json(PageModel(list=resp.dump(messages), paginator=paginator))
 
@@ -222,9 +258,17 @@ class AppHandler:
                     # 判断是工具调用还是文本生成，在队列中添加不同数据
                     if chunk.tool_calls or is_tool_call:
                         is_tool_call = True
-                        q.put({"id": gid, "event": "agent_thought", "data": json.dumps(chunk.tool_call_chunks)})
+                        q.put(
+                            {
+                                "id": gid,
+                                "event": "agent_thought",
+                                "data": json.dumps(chunk.tool_call_chunks),
+                            }
+                        )
                     else:
-                        q.put({"id": gid, "event": "agent_message", "data": chunk.content})
+                        q.put(
+                            {"id": gid, "event": "agent_message", "data": chunk.content}
+                        )
 
                 return {"messages": [gathered]}
 
@@ -241,12 +285,20 @@ class AppHandler:
                     tid = str(uuid4())
                     tool = tools_by_name[tool_call["name"]]
                     tool_result = tool.invoke(tool_call["args"])
-                    message.append(ToolMessage(
-                        tool_call_id=tool_call["id"],
-                        content=json.dumps(tool_result),
-                        tool_name=tool_call["name"],
-                    ))
-                    q.put({"id": tid, "event": "agent_action", "data": json.dumps(tool_result)})
+                    message.append(
+                        ToolMessage(
+                            tool_call_id=tool_call["id"],
+                            content=json.dumps(tool_result),
+                            tool_name=tool_call["name"],
+                        )
+                    )
+                    q.put(
+                        {
+                            "id": tid,
+                            "event": "agent_action",
+                            "data": json.dumps(tool_result),
+                        }
+                    )
 
                 return {"messages": message}
 
@@ -353,9 +405,7 @@ class AppHandler:
                         },
                     }
                 ],
-                "dataset_ids": [
-                    "d9baab72-9e23-449a-8513-5acd9e235f33"
-                ],
+                "dataset_ids": ["a07e38ec-8c45-46d1-89e5-cd29643088aa"],
             },
             {
                 "id": "675fca50-1228-8008-82dc-0c714158534c",
@@ -503,7 +553,7 @@ class AppHandler:
                 "title": "API工具",
                 "description": "",
                 "type": "api_tool",
-                "provider_id": "a9bff90b-f75f-4386-9e8f-f92b6a9ad5bb",
+                "provider_id": "3c18567e-0ca7-430f-afcc-57d72c6e1b9c",
                 "tool_id": "YoudaoSuggest",
                 "inputs": [
                     {
@@ -524,7 +574,7 @@ class AppHandler:
                             "type": "literal",
                             "content": "json",
                         },
-                    }
+                    },
                 ],
             },
             {
@@ -727,20 +777,26 @@ class AppHandler:
             },
         ]
 
-        workflow = Workflow(workflow_config=WorkflowConfig(
-            name="workflow",
-            description="工作流组件",
-            nodes=nodes,
-            edges=edges,
-            account_id=current_user.id
-        ))
+        workflow = Workflow(
+            workflow_config=WorkflowConfig(
+                name="workflow",
+                description="工作流组件",
+                nodes=nodes,
+                edges=edges,
+                account_id=current_user.id,
+            )
+        )
         result = workflow.invoke({"query": "你好", "location": "广州"})
-        return success_json({
-            **result,
-            "info": {
-                "name": workflow.name,
-                "description": workflow.description,
-                "args_schema": workflow.args_schema.model_json_schema(),
-            },
-            "node_results": [node_result.dict() for node_result in result["node_results"]]
-        })
+        return success_json(
+            {
+                **result,
+                "info": {
+                    "name": workflow.name,
+                    "description": workflow.description,
+                    "args_schema": workflow.args_schema.model_json_schema(),
+                },
+                "node_results": [
+                    node_result.dict() for node_result in result["node_results"]
+                ],
+            }
+        )

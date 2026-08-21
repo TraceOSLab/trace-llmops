@@ -4,6 +4,7 @@
 @File   :   embeddings_service.py
 @Author :   s.qiu@foxmail.com
 """
+
 import os
 import threading
 from pathlib import Path
@@ -70,10 +71,11 @@ class EmbeddingsService:
             return
 
         # 核心判断：如果是在 Flask 调试模式下，且不是真正的工作进程，则不加载模型
-        if os.environ.get("FLASK_DEBUG") == "1" and os.environ.get("WERKZEUG_RUN_MAIN") != "true":
-            # 此时是主监控进程，打印一行提示并直接返回
-            # print("ℹ️ [Embeddings] 监控进程跳过模型加载...")
-            return
+        # os.environ.get("WERKZEUG_RUN_MAIN") != "true"
+        # if os.environ.get("FLASK_DEBUG") == "1":
+        # 此时是主监控进程，打印一行提示并直接返回
+        # print("ℹ️ [Embeddings] 监控进程跳过模型加载...")
+        # return
 
         with self._lock:
             # 再次检查，防止在等待锁的过程中已被其他线程加载
@@ -81,6 +83,7 @@ class EmbeddingsService:
                 return
             # --- 解决 "Some weights..." 提示的关键代码 ---
             from transformers import logging as tf_logging
+
             tf_logging.set_verbosity_error()
 
             print(f"⏳ [Embeddings] 正在首次加载模型 (Device: {self._get_device()})...")
@@ -93,8 +96,8 @@ class EmbeddingsService:
                     model_kwargs={
                         "trust_remote_code": True,
                         "local_files_only": True,
-                        "device": self._get_device()
-                    }
+                        "device": self._get_device(),
+                    },
                 )
 
                 # 缓存层封装
