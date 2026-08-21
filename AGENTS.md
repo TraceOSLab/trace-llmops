@@ -9,7 +9,7 @@
 
 ## 标准命令
 
-- 后端日常开发以 `llmops-api/.vscode/launch.json` 的 VS Code F5 调试配置为首选启动方式；`uv` 负责依赖和终端任务，不要把 `uv run` 描述成唯一启动入口。
+- 后端日常开发以 `llmops-api/.vscode/launch.json` 中的 `Development (Flask + Celery)` VS Code 复合调试配置为首选启动方式；`uv` 负责依赖和终端任务，不要把 `uv run` 描述成唯一启动入口。
 - Python 依赖使用 `uv`，前端依赖使用 `pnpm`。
 - 使用 `docker compose up -d` 启动 PostgreSQL、Redis 和 Weaviate。
 - VS Code 应直接打开 `llmops-api/`，或将它作为独立 Workspace Folder；后端的 F5 与 Task 操作见 `docs/runbooks/development.md`。

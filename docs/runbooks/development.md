@@ -2,7 +2,7 @@
 
 ## 当前开发方式
 
-项目最初在 PyCharm 中开发，后来迁移到 VS Code。当前后端日常启动方式以 `llmops-api/.vscode/launch.json` 为准：在 VS Code 中按 F5 启动 Flask。`uv` 仍然是 Python 依赖管理工具，并被 `tasks.json` 中的终端任务使用，但它不是唯一、也不是日常首选的 API 启动入口。
+项目最初在 PyCharm 中开发，后来迁移到 VS Code。当前后端日常启动方式以 `llmops-api/.vscode/launch.json` 为准：选择 `Development (Flask + Celery)` 后按 F5，同时启动 Flask API 和 Celery Worker。`uv` 仍然是 Python 依赖管理工具，并被 `tasks.json` 中的终端任务使用，但它不是唯一、也不是日常首选的 API 启动入口。
 
 需要注意，`.vscode` 位于 `llmops-api/` 内，而不是仓库根目录：
 
@@ -30,27 +30,32 @@ llmops-api/.venv/bin/python
 
 在 macOS 上可以按 `⇧⌘P` 打开 Command Palette，搜索 `Python: Select Interpreter`。这一步很重要：F5 的 `launch.json` 通过 Python 扩展和 debugpy 启动 Flask，它使用的是 VS Code 当前选中的 Python Interpreter，而不是在配置中直接执行 `uv run`。
 
-如果 VS Code 没有 `Python: Select Interpreter` 或 F5 无法识别 `debugpy` 配置，先安装或启用 Microsoft Python 扩展。
+如果 VS Code 没有 `Python: Select Interpreter` 或 F5 无法识别 `debugpy` 配置，接受工作区推荐并安装或启用 Microsoft Python 与 Python Debugger 扩展。
 
-## 使用 F5 启动 Flask API
+## 使用 F5 启动完整开发进程
 
 确保 VS Code 当前打开的是 `llmops-api/`，然后：
 
 1. 先从仓库根目录执行 `docker compose up -d`，启动 PostgreSQL、Redis 和 Weaviate；
 2. 确认状态栏选择的是 `.venv/bin/python`；
 3. 打开 **Run and Debug** 面板；
-4. 选择 `Flask (app/http/app.py)`；
+4. 选择 `Development (Flask + Celery)`；
 5. 按 F5。
 
-当前 `launch.json` 会执行 Flask Module，工作目录是 `${workspaceFolder}`，并设置：
+这个 compound 配置会同时启动两个独立的 debugpy 进程：
 
-- `FLASK_APP=app.http.app`
-- `FLASK_DEBUG=1`
-- `args=["run"]`
+- `Flask API`：以 `app.http.app:create_app` 为工厂启动 Flask；
+- `Celery Worker`：以 `app.http.app:celery` 为 Celery 应用启动 Worker。
 
-因此 F5 只负责启动 Flask API，不会自动启动 Docker、Celery Worker 或数据库迁移。
+两个进程分别显示在集成终端中，都支持 Python 断点。compound 设置了 `stopAll`，停止任意一个调试会话时，VS Code 会停止本次 compound 启动的其余进程。以后增加常驻开发进程时，可以新增一个独立 configuration，再把它的名称加入 `compounds[].configurations`。
 
-停止 API 时，在 VS Code 调试工具栏点击停止，或按 `⇧F5`。
+`Flask API` 使用 `--no-reload` 和 `--no-debugger`：代码仍运行在 Flask debug 模式，但关闭 Werkzeug 自带的 reloader 和 debugger，避免 reloader 创建第二个进程后造成重复初始化、断点命中混乱和停止不彻底。修改 Python 代码后按 `⇧F5`，再按 F5 重启 compound。
+
+`Celery Worker` 使用 `--pool=solo`，让任务留在 debugpy 管理的当前进程中，断点和停止行为最可预测。这是本地调试配置，不是生产部署的并发方案。
+
+需要只调试一个进程时，选择 `Flask API` 或 `Celery Worker` 后按 F5 即可。
+
+F5 不会自动执行数据库迁移，也不会自动启动或停止 Docker Compose。迁移可能改变数据结构，Docker 基础设施通常跨多个调试会话复用，把它们绑定到每次 F5 会造成不必要的副作用。首次开发或基础设施未运行时，仍应先从仓库根目录执行 `docker compose up -d`。
 
 ## 使用 tasks.json 启动任务
 
@@ -58,18 +63,18 @@ llmops-api/.venv/bin/python
 
 | Task            | 作用                                                      | 日常启动是否需要                     |
 | --------------- | --------------------------------------------------------- | ------------------------------------ |
-| `celery worker` | 启动 Celery Worker，并把日志写入 `storage/log/celery.log` | 文档索引等异步任务需要               |
+| `celery worker` | 不进入调试器、单独启动 Celery Worker                      | 排查 Worker 启动或只观察任务日志时   |
 | `db upgrade`    | 把当前开发数据库升级到最新迁移                            | 首次启动或拉取到新迁移后需要         |
 | `db migrate`    | 根据 Model 变化生成新迁移                                 | 普通启动不需要                       |
 | `db downgrade`  | 回退数据库迁移                                            | 普通启动禁止执行，可能改变或丢失数据 |
 
-第一次运行 Celery Task：
+通常直接使用 `Development (Flask + Celery)`，不再需要手工另开终端。若只想运行 Worker 而不调试，可以运行 Celery Task：
 
 1. 确认 Redis 等 Docker 服务已经启动；
 2. 在 VS Code 中按 `⇧⌘P`；
 3. 输入并选择 **Tasks: Run Task**；
 4. 选择 `celery worker`；
-5. VS Code 会打开一个集成终端并持续运行 Worker；
+5. VS Code 会打开一个专用集成终端并持续运行 Worker，日志直接显示在终端；
 6. 需要停止时聚焦该终端，按 `Ctrl+C`，或点击终端的停止/垃圾桶按钮。
 
 也可以通过菜单 **Terminal → Run Task...** 选择相同任务。Task 会在 `${workspaceFolder}` 下运行，所以这里同样要求 `llmops-api/` 是当前 Workspace Folder。
@@ -79,18 +84,19 @@ llmops-api/.venv/bin/python
 不要为了“试一下 tasks.json”而运行 `db migrate` 或 `db downgrade`：
 
 - `db migrate` 会在 `internal/migrations/versions/` 生成迁移文件，应只在你主动修改 Model 后使用；
-- 当前 Task 没有填写迁移说明，真正创建迁移时更推荐在终端执行带 `-m` 的命令；
+- `db migrate` 会提示输入迁移说明，并将其传给 `-m`；
+- `db downgrade` 会提示输入目标 revision，默认是 `-1`；
 - `db downgrade` 会回退数据库结构，只有明确理解目标迁移和数据影响时才能执行。
 
 ## 推荐的日常启动顺序
 
 1. 从仓库根目录启动基础设施：`docker compose up -d`；
 2. 在 VS Code 中直接打开 `llmops-api/`；
-3. 通过 **Tasks: Run Task → celery worker** 启动 Worker；
-4. 选择 `Flask (app/http/app.py)` 并按 F5 启动 API；
-5. 调试结束后停止 F5 和 Celery Terminal；基础设施不再使用时运行 `docker compose down`。
+3. 选择 `Development (Flask + Celery)` 并按 F5；
+4. 调试结束后按 `⇧F5`，Flask 和 Celery 会一起停止；
+5. 基础设施不再使用时运行 `docker compose down`。
 
-如果当前功能不涉及文档索引或其他异步任务，可以不启动 Celery Worker；F5 启动 Flask 本身不依赖 Worker 进程一直在线。
+如果当前功能不涉及文档索引或其他异步任务，可以改选 `Flask API` 单独启动；Flask 本身不依赖 Worker 进程一直在线。
 
 ## 终端备用启动方式
 
@@ -105,7 +111,7 @@ uv run flask --app app.http.app:create_app run --debug
 
 ```bash
 cd llmops-api
-uv run celery -A app.http.app:celery worker --loglevel=INFO
+uv run celery -A app.http.app:celery worker --loglevel=INFO --pool=solo
 ```
 
 终端命令和 `.vscode` 配置是同一套应用入口的两种使用方式。文档中的 `uv run` 主要用于环境初始化、数据库命令、Celery Task 和无 IDE 场景。
@@ -175,9 +181,10 @@ rg -n 'event: |text/event-stream|QueueEvent' llmops-api
 
 ## 常见问题
 
-- F5 看不到 `Flask (app/http/app.py)`：通常是因为只打开了仓库根目录，或者 Python 扩展未启用。请直接打开 `llmops-api/` 后重试。
+- F5 看不到 `Development (Flask + Celery)`：通常是因为只打开了仓库根目录，或者 Python/debugpy 扩展未启用。请直接打开 `llmops-api/` 后重试。
 - **Tasks: Run Task** 中看不到 Celery/数据库任务：确认当前 Workspace Folder 是 `llmops-api/`，且 `.vscode/tasks.json` 未被 Workspace Trust 限制。
-- `celery worker` 终端输出较少：当前 Task 使用了 `--logfile=storage/log/celery.log`，请查看该日志文件。
+- compound 中只出现 Flask、没有 Celery：在 Run and Debug 下拉框中确认选择的是 `Development (Flask + Celery)`，而不是 `Flask API`。
+- 修改代码后没有自动重载：调试配置有意关闭 Flask reloader；按 `⇧F5` 后再次按 F5，确保 Flask 和 Celery 使用同一版代码。
 - API 启动失败：确认位于 `llmops-api/`，依赖已通过 `uv sync --locked` 安装，且两个 `.env` 文件的本地配置一致。
 - Celery 收不到任务：确认 Redis 可用、Worker 使用正确的 `-A app.http.app:celery`，并在代码变化后重启 Worker。
 - 文档索引失败：依次检查 PostgreSQL 中的文档状态、Celery 日志和 Weaviate 连通性。
