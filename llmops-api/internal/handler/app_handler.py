@@ -164,7 +164,7 @@ class AppHandler:
         """更新应用会话调试的长期记忆"""
         req = UpdateDebugConversationSummaryReq()
         if not req.validate():
-            raise validate_error_json(req.errors)
+            return validate_error_json(req.errors)
         self.app_service.update_debug_conversation_summary(
             app_id, req.summary.data, current_user
         )

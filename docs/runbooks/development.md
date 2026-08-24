@@ -126,19 +126,21 @@ docker compose down
 
 ## 当前测试方式
 
+当前测试是全路由 API 集成测试，使用真实 Flask、认证、Schema、Service 和专用临时 PostgreSQL。日常执行统一在仓库根目录运行：
+
 ```bash
-cd llmops-api
-uv run pytest
+./scripts/test.sh
 ```
 
-当前测试主要是 Handler 测试，收集测试时会创建 Flask 应用，并可能依赖 PostgreSQL、Redis、固定账号和已有数据。它们还不是完全离线的单元测试。执行前先确认：
+脚本会启动 `llmops_test` PostgreSQL、执行迁移、运行测试，最后自动销毁容器和临时数据。需要保留失败现场时执行：
 
-- 数据库和 Redis 指向本地开发或专用测试环境；
-- 不会读取生产密钥；
-- 不会调用付费模型或公网服务；
-- 测试产生的数据可安全清理。
+```bash
+KEEP_TEST_DATABASE=1 ./scripts/test.sh
+```
 
-仓库目前没有统一 Ruff、类型检查、CI 或隔离的集成测试环境。需要这些能力时，应作为独立学习任务逐项加入，不把它们写成已经存在的命令。
+测试安全检查只允许连接 `127.0.0.1:55432` 且数据库名包含 `test`。LLM、COS、OAuth 公网、Celery、Redis 和 Weaviate 在系统边界使用 Fake，不会调用付费模型或公网服务。直接执行 `uv run pytest` 前必须自行启动测试库并提供通过安全检查的 `TEST_DATABASE_URL`。
+
+仓库目前已有隔离的 API 集成测试环境，但还没有统一 Ruff、类型检查或 CI。需要这些能力时，应作为独立学习任务逐项加入，不把它们写成已经存在的命令。
 
 ## Python 依赖维护
 
