@@ -3,14 +3,45 @@
   description: OpenAI提供的模型，例如GPT-4o-mini和GPT-4o。
   icon: icon.svg
   background: '#E5E7EB'
+  api_key_env: OPENAI_API_KEY
+  base_url_env: OPENAI_API_BASE
   supported_model_types:
     - chat
     - completion
+- name: deepseek
+  label: DeepSeek
+  description: DeepSeek提供的通用对话与推理模型。
+  icon: icon.svg
+  background: '#EEF2FF'
+  api_key_env: DEEPSEEK_API_KEY
+  base_url: https://api.deepseek.com
+  supported_model_types:
+    - chat
 - name: moonshot
-  label: 月之暗面
-  description: Moonshot提供的模型，例如moonshot-v1-8k、moonshot-v1-32k和moonshot-v1-128k。
+  label: Kimi
+  description: Moonshot AI提供的Kimi通用与长上下文模型。
   icon: icon.png
   background: '#FFFFFF'
+  api_key_env: MOONSHOT_API_KEY
+  base_url: https://api.moonshot.cn/v1
+  supported_model_types:
+    - chat
+- name: doubao
+  label: 豆包
+  description: 火山方舟提供的豆包通用模型。
+  icon: icon.svg
+  background: '#FFF1F2'
+  api_key_env: ARK_API_KEY
+  base_url: https://ark.cn-beijing.volces.com/api/v3
+  supported_model_types:
+    - chat
+- name: zhipu
+  label: 智谱 GLM
+  description: 智谱AI提供的GLM通用与推理模型。
+  icon: icon.svg
+  background: '#EFF6FF'
+  api_key_env: ZHIPU_API_KEY
+  base_url: https://open.bigmodel.cn/api/paas/v4/
   supported_model_types:
     - chat
 - name: tongyi
@@ -18,6 +49,7 @@
   description: 通义千问提供的模型，例如千问-max、千问-plus等。
   icon: icon.png
   background: '#FFFFFF'
+  visible: false
   supported_model_types:
     - chat
 - name: wenxin
@@ -25,5 +57,6 @@
   description: 百度文心一言提供的模型，例如ERNIE-3.5、ERNIE-4等。
   icon: icon.png
   background: '#FFFFFF'
+  visible: false
   supported_model_types:
     - chat

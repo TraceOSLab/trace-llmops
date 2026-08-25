@@ -20,10 +20,10 @@ from langchain_classic.base_memory import BaseMemory
 from langchain_core.messages import ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tracers import Run
-from langchain_openai import ChatOpenAI
 from langgraph.constants import END
 from langgraph.graph import MessagesState, StateGraph
 
+from internal.core.language_model import LanguageModelManager
 from internal.core.tools.builtin_tools.providers import BuiltinProviderManager
 from internal.schema.app_schema import (
     CompletionReq,
@@ -40,7 +40,11 @@ from internal.schema.app_schema import (
     GetAppsWithPageReq,
     GetAppsWithPageResp,
 )
-from internal.service import AppService, VectorDatabaseService, ConversationService
+from internal.service import (
+    AppService,
+    VectorDatabaseService,
+    ConversationService,
+)
 from pkg.paginator import PageModel
 from pkg.response import (
     validate_error_json,
@@ -59,6 +63,7 @@ class AppHandler:
     vector_database_service: VectorDatabaseService
     builtin_provider_manager: BuiltinProviderManager
     conversation_service: ConversationService
+    language_model_manager: LanguageModelManager
 
     @login_required
     def create_app(self):
@@ -237,7 +242,9 @@ class AppHandler:
             # 创建聊天、工具、路由节点
             def chatbot(state: MessagesState) -> MessagesState:
                 """聊天对话节点"""
-                llm = ChatOpenAI(model="glm-4.7", temperature=0.7).bind_tools(tools)
+                llm = self.language_model_manager.create_system_chat_model(
+                    {"temperature": 0.7}
+                ).bind_tools(tools)
 
                 # 获取流式输出内容
                 is_first_chunk = True  # 是否是第一个块
@@ -355,4 +362,11 @@ class AppHandler:
 
     @login_required
     def ping(self):
-        return success_message("ok")
+        llm = self.language_model_manager.create_system_chat_model()
+        return success_json(
+            {
+                "content": llm.invoke("你好，你是").content,
+                "features": llm.features,
+                "metadata": llm.metadata,
+            }
+        )

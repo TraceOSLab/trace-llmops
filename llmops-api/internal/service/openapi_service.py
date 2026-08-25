@@ -14,12 +14,12 @@ from typing import Generator
 from flask import current_app
 from injector import inject
 from langchain_core.messages import HumanMessage
-from langchain_openai import ChatOpenAI
 
 from internal.core.agent.agents import FunctionCallAgent
 from internal.core.agent.entities import AgentConfig
 from internal.core.agent.entities.queue_entity import QueueEvent
 from internal.core.memory import TokenBufferMemory
+from internal.core.language_model import LanguageModelManager
 from internal.entity.app_entity import AppStatus
 from internal.entity.conversation_entity import InvokeFrom, MessageStatus
 from internal.entity.dataset_entity import RetrievalSource
@@ -44,6 +44,7 @@ class OpenApiService(BaseService):
     app_config_service: AppConfigService
     retrieval_service: RetrievalService
     conversation_service: ConversationService
+    language_model_manager: LanguageModelManager
 
     def chat(self, req: OpenAPIChatReq, account: Account):
         """开放API 发起对话，返回块内容或生成器"""
@@ -92,8 +93,10 @@ class OpenApiService(BaseService):
             "status": MessageStatus.NORMAL
         })
 
-        # 创建 LLM todo:后续多LLM接入
-        llm = ChatOpenAI(model=app_config["model_config"]["model"], **app_config["model_config"]["parameters"])
+        # 根据应用配置创建对应 Provider 的模型
+        llm = self.language_model_manager.create_chat_model(
+            app_config["model_config"]
+        )
 
         # 提取短期记忆
         token_buffer_memory = TokenBufferMemory(db=self.db, conversation=conversation, model_instance=llm)

@@ -1,0 +1,21 @@
+model: glm-4.5-flash
+label: GLM-4.5 Flash
+model_type: chat
+features:
+  - tool_call
+  - agent_thought
+context_window: 131072
+max_output_tokens: 16384
+attributes:
+  model: glm-4.5-flash
+parameters:
+  - name: temperature
+    use_template: temperature
+    default: 1
+  - name: top_p
+    use_template: top_p
+    default: 0.95
+  - name: max_tokens
+    use_template: max_completion_tokens
+    default: 8192
+    max: 16384

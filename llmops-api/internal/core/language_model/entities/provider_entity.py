@@ -6,7 +6,6 @@
 @Author :   s.qiu@foxmail.com
 """
 
-from encodings import utf_8
 import os
 from typing import Any, Optional, Type, Union
 
@@ -33,6 +32,10 @@ class ProviderEntity(BaseModel):
     supported_model_types: list[ModelType] = Field(
         default_factory=list
     )  # 支持的模型类型
+    visible: bool = True  # 是否在模型列表接口中展示
+    api_key_env: str = ""  # API Key 对应的环境变量名
+    base_url: str = ""  # Provider 默认 API 地址
+    base_url_env: str = ""  # 可覆盖默认地址的环境变量名
 
 
 class Provider(BaseModel):
@@ -44,7 +47,7 @@ class Provider(BaseModel):
     model_entity_map: dict[str, ModelEntity] = Field(
         default_factory=dict
     )  # 模型实体映射
-    model_class_map: dict[str, Union[None, Type[BaseLanguageModel]]] = Field(
+    model_class_map: dict[ModelType, Union[None, Type[BaseLanguageModel]]] = Field(
         default_factory=dict
     )  # 模型类映射
 
@@ -58,7 +61,7 @@ class Provider(BaseModel):
         # 1. 构建模型类映射
         # 动态导入服务
         for model_type in provider_entity.supported_model_types:
-            symbol_name = model_type[0].upper() + model_type[1:]
+            symbol_name = model_type.value.capitalize()
 
             self.model_class_map[model_type] = dynamic_import(
                 f"internal.core.language_model.providers.{provider_entity.name}.{model_type.value}",
@@ -87,9 +90,10 @@ class Provider(BaseModel):
                 model_yaml_data = yaml.safe_load(f)
 
             # 处理模型的parameters部分 是否使用默认值填充
-            model_parameters = model_yaml_data.get("parameters")
+            model_parameters = model_yaml_data.get("parameters") or []
             parameters = []
             for parameter in model_parameters:
+                parameter = parameter.copy()
                 use_template = parameter.get("use_template")
                 # 如果是用来默认值那就使用模板填充 否则直接填充
                 if use_template:
@@ -125,3 +129,7 @@ class Provider(BaseModel):
     def get_model_entities(self) -> list[ModelEntity]:
         """获取该提供商模型实体列表"""
         return list(self.model_entity_map.values())
+
+    def get_visible_model_entities(self) -> list[ModelEntity]:
+        """获取该提供商可展示的模型实体列表。"""
+        return [model for model in self.model_entity_map.values() if model.visible]

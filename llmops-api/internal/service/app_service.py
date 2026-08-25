@@ -17,7 +17,6 @@ from uuid import UUID
 from flask import current_app
 from injector import inject
 from langchain_core.messages import HumanMessage
-from langchain_openai import ChatOpenAI
 from redis import Redis
 from sqlalchemy import func, desc
 
@@ -25,6 +24,7 @@ from internal.core.agent.agents import FunctionCallAgent, AgentQueueManager
 from internal.core.agent.entities import AgentConfig
 from internal.core.agent.entities.queue_entity import QueueEvent
 from internal.core.memory import TokenBufferMemory
+from internal.core.language_model import LanguageModelManager
 from internal.core.tools.api_tools.providers import ApiProviderManager
 from internal.core.tools.builtin_tools.providers import BuiltinProviderManager
 from internal.entity.app_entity import AppStatus, AppConfigType, DEFAULT_APP_CONFIG
@@ -54,6 +54,7 @@ class AppService(BaseService):
     conversation_service: ConversationService
     builtin_provider_manager: BuiltinProviderManager
     api_provider_manager: ApiProviderManager
+    language_model_manager: LanguageModelManager
 
     def create_app(self, req: CreateAppReq, account: Account) -> App:
         """个人空间新增应用"""
@@ -332,8 +333,9 @@ class AppService(BaseService):
                               query=query, status=MessageStatus.NORMAL)
 
         # 根据配置实例化模型
-        llm = ChatOpenAI(model=draft_app_config["model_config"]["model"],
-                         **draft_app_config["model_config"]["parameters"])
+        llm = self.language_model_manager.create_chat_model(
+            draft_app_config["model_config"]
+        )
 
         # 提取短期记忆
         token_buffer_memory = TokenBufferMemory(db=self.db, conversation=debug_conversation, model_instance=llm)
@@ -425,7 +427,12 @@ class AppService(BaseService):
         ):
             raise ValidateErrorException("草稿配置字段出错，请核实后重试")
 
-        # todo:3.校验model_config字段，等待多LLM接入时完成该步骤校验
+        # 3.校验并规范化模型配置
+        if "model_config" in draft_app_config:
+            validated_model_config = self.language_model_manager.validate_model_config(
+                draft_app_config["model_config"]
+            )
+            draft_app_config["model_config"] = validated_model_config.model_dump()
 
         # 4.校验dialog_round上下文轮数，校验数据类型以及范围
         if "dialog_round" in draft_app_config:

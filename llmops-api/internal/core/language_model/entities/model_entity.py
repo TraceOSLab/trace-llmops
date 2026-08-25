@@ -11,7 +11,7 @@ from enum import Enum
 from typing import Any, Optional
 
 from langchain_core.language_models import BaseLanguageModel as LCBaseLanguageModel
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DefaultModelParameterName(str, Enum):
@@ -78,10 +78,21 @@ class ModelEntity(BaseModel):
     context_window: int = 0  # 上下文窗口长度（输入+输出）
     max_output_tokens: int = 0  # 最大输出token数（输出）
     attributes: dict[str, Any] = Field(default_factory=dict)  # 模型属性
-    parameters: list[Any] = Field(default_factory=list)  # 模型参数字段规则列表
+    parameters: list[ModelParameter] = Field(default_factory=list)  # 模型参数字段规则列表
     metadata: dict[str, Any] = Field(
         default_factory=dict
     )  # 模型元数据 存储模型额外数据
+    visible: bool = True  # 是否在模型列表中展示；隐藏模型仍可兼容已有配置
+
+
+class LanguageModelConfig(BaseModel):
+    """运行时语言模型配置。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: str
+    model: str
+    parameters: dict[str, Any] = Field(default_factory=dict)
 
 
 class BaseLanguageModel(LCBaseLanguageModel, ABC):

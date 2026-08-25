@@ -1,5 +1,6 @@
 model: moonshot-v1-32k
 label: moonshot-v1-32k
+visible: false
 model_type: chat
 features:
   - tool_call

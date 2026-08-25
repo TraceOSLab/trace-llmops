@@ -19,6 +19,7 @@ from pydantic import ValidationError
 from sqlalchemy import desc
 
 from internal.core.tools.builtin_tools.providers import BuiltinProviderManager
+from internal.core.language_model import LanguageModelManager
 from internal.core.workflow import Workflow as WorkflowTool
 from internal.core.workflow.entities.edge_entity import BaseEdgeData
 from internal.core.workflow.entities.node_entity import NodeType, BaseNodeData
@@ -59,6 +60,7 @@ class WorkflowService(BaseService):
 
     db: SQLAlchemy
     builtin_provider_manager: BuiltinProviderManager
+    language_model_manager: LanguageModelManager
 
     def create_workflow(self, req: CreateWorkflowReq, account: Account) -> Workflow:
         """创建工作流"""
@@ -440,6 +442,11 @@ class WorkflowService(BaseService):
                     .all()
                 )
                 node_data.dataset_ids = [dataset.id for dataset in datasets]
+            elif node_data.node_type == NodeType.LLM:
+                validated_model_config = self.language_model_manager.validate_model_config(
+                    node_data.language_model_config
+                )
+                node_data.language_model_config = validated_model_config.model_dump()
             elif node_data.node_type == NodeType.TOOL:
                 # 判断工具的类型执行不同的操作
                 if node_data.tool_type == "builtin_tool":

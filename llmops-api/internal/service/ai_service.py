@@ -13,8 +13,8 @@ from uuid import UUID
 from injector import inject
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 
+from internal.core.language_model import LanguageModelManager
 from internal.entity.ai_entity import OPTIMIZE_PROMPT_TEMPLATE
 from internal.exception import ForbiddenException
 from internal.model import Account, Message
@@ -29,15 +29,17 @@ class AIService(BaseService):
     """AI辅助服务"""
     db: SQLAlchemy
     conversation_service: ConversationService
+    language_model_manager: LanguageModelManager
 
-    @classmethod
-    def optimize_prompt(cls, prompt: str) -> Generator[str, None, None]:
+    def optimize_prompt(self, prompt: str) -> Generator[str, None, None]:
         """根据传递的预设prompt进行优化"""
         prompt_template = ChatPromptTemplate.from_messages([
             ("system", OPTIMIZE_PROMPT_TEMPLATE),
             ("human", "{prompt}")
         ])
-        llm = ChatOpenAI(model="glm-4.7", temperature=0.5)
+        llm = self.language_model_manager.create_system_chat_model(
+            {"temperature": 0.5}
+        )
         chain = prompt_template | llm | StrOutputParser()
 
         # 调用流事件返回

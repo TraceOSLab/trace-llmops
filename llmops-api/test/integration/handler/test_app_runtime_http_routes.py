@@ -136,6 +136,10 @@ def test_app_debug_stream_stop_and_ping_routes(
     fake_tool = lambda: MagicMock()
     app_handler.builtin_provider_manager = MagicMock()
     app_handler.builtin_provider_manager.get_tool.return_value = fake_tool
+    fake_llm = MagicMock(features=[], metadata={})
+    fake_llm.invoke.return_value.content = "ok"
+    app_handler.language_model_manager = MagicMock()
+    app_handler.language_model_manager.create_system_chat_model.return_value = fake_llm
 
     debug_response = client.post(
         f"/apps/{app_record.id}/debug", json={"query": "hello"}

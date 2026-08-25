@@ -27,7 +27,7 @@ DEFAULT_MODEL_PARAMETER_TEMPLATE = {
         "type": ModelParameterType.FLOAT,
         "help": "通过核心采样控制多样性，0.5表示考虑了一半的所有可能性加权选项",
         "required": False,
-        "default": 0,
+        "default": 1,
         "min": 0,
         "max": 1,
         "precision": 2,

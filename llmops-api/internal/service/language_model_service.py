@@ -6,16 +6,18 @@
 @Author : Youyou
 """
 
-from flask import current_app
+import mimetypes
+import os
+from dataclasses import dataclass
 from typing import Any
+
+from flask import current_app
+from injector import inject
+
 from internal.core.language_model import LanguageModelManager
 from internal.exception.exception import NotFoundException
 from internal.lib.helper import convert_model_to_dict
 from internal.service.base_service import BaseService
-from injector import inject
-from dataclasses import dataclass
-import os
-import mimetypes
 from pkg.sqlalchemy import SQLAlchemy
 
 
@@ -29,13 +31,16 @@ class LanguageModelService(BaseService):
 
     def get_language_models(self) -> list[dict[str, Any]]:
         """获取所有模型列表"""
-        providers = self.language_model_manager.get_providers()
+        providers = self.language_model_manager.get_visible_providers()
         # 构建语言模型列表，循环读取数据
         language_models = []
         for provider in providers:
             # 获取提供商实体和模型实体列表
             provider_entity = provider.provider_entity
-            model_entities = provider.get_model_entities()
+            model_entities = provider.get_visible_model_entities()
+            models = convert_model_to_dict(model_entities)
+            for model in models:
+                model.pop("visible", None)
 
             # 构建响应字典结构
             language_model = {
@@ -46,7 +51,7 @@ class LanguageModelService(BaseService):
                 "description": provider_entity.description,
                 "background": provider_entity.background,
                 "support_model_types": provider_entity.supported_model_types,
-                "models": convert_model_to_dict(model_entities),
+                "models": models,
             }
             language_models.append(language_model)
 
@@ -65,7 +70,9 @@ class LanguageModelService(BaseService):
             raise NotFoundException("该模型不存在")
 
         # 3.构建数据并响应
-        return convert_model_to_dict(model_entity)
+        model = convert_model_to_dict(model_entity)
+        model.pop("visible", None)
+        return model
 
     def get_language_model_icon(self, provider_name: str) -> tuple[bytes, str]:
         """根据传递的提供者名字获取提供商对应的图标信息"""

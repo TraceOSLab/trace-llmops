@@ -6,6 +6,11 @@
 @Author :   s.qiu@foxmail.com
 """
 
-from .language_model_manager import LanguageModelManager
+from .language_model_manager import LanguageModelManager, get_language_model_manager
+from .entities import LanguageModelConfig
 
-__all__ = ["LanguageModelManager"]
+__all__ = [
+    "LanguageModelConfig",
+    "LanguageModelManager",
+    "get_language_model_manager",
+]

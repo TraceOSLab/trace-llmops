@@ -15,9 +15,9 @@ from flask import Flask
 from injector import inject
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 
 from internal.core.agent.entities.queue_entity import AgentThought, QueueEvent
+from internal.core.language_model import LanguageModelManager
 from internal.entity.conversation_entity import (
     SUMMARIZER_TEMPLATE,
     CONVERSATION_NAME_TEMPLATE,
@@ -37,13 +37,16 @@ class ConversationService(BaseService):
     """会话服务"""
 
     db: SQLAlchemy
+    language_model_manager: LanguageModelManager
 
     def summary(
         self, human_message: str, ai_message: str, old_summary: str = ""
     ) -> str:
         """根据消息和旧的摘要生成 新摘要"""
         prompt = ChatPromptTemplate.from_template(SUMMARIZER_TEMPLATE)
-        llm = ChatOpenAI(model="glm-4.7", temperature=0.5)
+        llm = self.language_model_manager.create_system_chat_model(
+            {"temperature": 0.5}
+        )
         # 构建链应用
         chain = prompt | llm | StrOutputParser()
         new_summary = chain.invoke(
@@ -62,7 +65,9 @@ class ConversationService(BaseService):
         prompt = ChatPromptTemplate.from_messages(
             [("system", CONVERSATION_NAME_TEMPLATE), ("human", "{query}")]
         )
-        llm = ChatOpenAI(model="glm-4.7", temperature=0)
+        llm = self.language_model_manager.create_system_chat_model(
+            {"temperature": 0}
+        )
         structured_llm = llm.with_structured_output(ConversationInfo)
         chain = prompt | structured_llm
 
@@ -93,7 +98,9 @@ class ConversationService(BaseService):
         prompt = ChatPromptTemplate.from_messages(
             [("system", SUGGESTED_QUESTIONS_TEMPLATE), ("human", "{histories}")]
         )
-        llm = ChatOpenAI(model="glm-4.7", temperature=0)
+        llm = self.language_model_manager.create_system_chat_model(
+            {"temperature": 0}
+        )
         structured_llm = llm.with_structured_output(SuggestedQuestions)
         chain = prompt | structured_llm
         suggested_questions = chain.invoke({"histories": histories})

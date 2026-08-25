@@ -1,26 +1,26 @@
-model: moonshot-v1-128k
-label: moonshot-v1-128k
-visible: false
+model: kimi-k2.6
+label: Kimi K2.6
 model_type: chat
 features:
   - tool_call
   - agent_thought
   - image_input
-context_window: 131072
+context_window: 262144
 max_output_tokens: 131072
 attributes:
-  model: moonshot-v1-128k
+  model: kimi-k2.6
 parameters:
   - name: temperature
     use_template: temperature
+    min: 1
     max: 1
-    default: 0.85
+    default: 1
   - name: top_p
     use_template: top_p
-  - name: presence_penalty
-    use_template: presence_penalty
-  - name: frequency_penalty
-    use_template: frequency_penalty
+    min: 0.95
+    max: 0.95
+    default: 0.95
   - name: max_tokens
     use_template: max_completion_tokens
-    default: 4096
+    default: 8192
+    max: 131072
