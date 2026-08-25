@@ -16,6 +16,7 @@ def test_language_model_list_only_exposes_visible_catalog():
         "moonshot",
         "doubao",
         "zhipu",
+        "ollama",
     ]
     assert [model["model_name"] for model in providers[2]["models"]] == [
         "kimi-k3",
@@ -23,6 +24,8 @@ def test_language_model_list_only_exposes_visible_catalog():
     ]
     assert all(
         "visible" not in model
+        and "structured_output_strategy" not in model
+        and "structured_output_strict" not in model
         for provider in providers
         for model in provider["models"]
     )
@@ -38,3 +41,5 @@ def test_language_model_detail_does_not_expose_runtime_visibility():
 
     assert model["model_name"] == "moonshot-v1-8k"
     assert "visible" not in model
+    assert "structured_output_strategy" not in model
+    assert "structured_output_strict" not in model

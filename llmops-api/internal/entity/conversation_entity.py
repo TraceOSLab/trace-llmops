@@ -40,62 +40,12 @@ END OF EXAMPLE
 新的总结:
 """
 
-# 会话名称 提示词
-CONVERSATION_NAME_TEMPLATE = "请从用户传递的内容中提取出对应的主题"
-
-
-# 提取会话名称
-class ConversationInfo(BaseModel):
-    """你需要将用户的输入分解为“主题”和“意图”，以便准确识别用户输入的类型。
-    注意：用户的语言可能是多样性的，可以是英文、中文、日语、法语等。
-    确保你的输出与用户的语言尽可能一致并简短！
-
-    示例1：
-    用户输入: hi, my name is LiHua.
-    {
-        "language_type": "用户的输入是纯英文",
-        "reasoning": "输出语言必须是英文",
-        "subject": "Users greet me"
-    }
-
-    示例2:
-    用户输入: hello
-    {
-        "language_type": "用户的输入是纯英文",
-        "reasoning": "输出语言必须是英文",
-        "subject": "Greeting myself"
-    }
-
-    示例3:
-    用户输入: www.bing.com讲了什么
-    {
-        "language_type": "用户输入是中英文混合",
-        "reasoning": "英文部分是URL，主要意图还是使用中文表达的，所以输出语言必须是中文",
-        "subject": "询问网站www.bing.com"
-    }
-
-    示例4:
-    用户输入: why小红的年龄is老than小明?
-    {
-        "language_type": "用户输入是中英文混合",
-        "reasoning": "英文部分是口语化输入，主要意图是中文，且中文占据更大的实际意义，所以输出语言必须是中文",
-        "subject": "询问小红和小明的年龄"
-    }
-
-    示例5:
-    用户输入: yo, 你今天怎么样?
-    {
-        "language_type": "用户输入是中英文混合",
-        "reasoning": "英文部分是口语化输入，主要意图是中文，所以输出语言必须是中文",
-        "subject": "询问我今天的状态"
-    }"""
-    language_type: str = Field(description="用户输入语言的语言类型声明")
-    reasoning: str = Field(description="对用户输入的文本进行语言判断的推理过程，类型为字符串")
-    subject: str = Field(description=(
-        "对用户的输入进行简短的总结，提取输入的“意图”和“主题”，"
-        "输出语言必须和输入语言保持一致，尽可能简单明了，"
-        "尤其是用户问题针对模型本身时，可以通过适当的方式加入趣味性。"
-    ))
+# 会话名称提示词。标题本身是字符串，不要求模型使用工具或结构化输出。
+CONVERSATION_NAME_TEMPLATE = """根据用户输入生成一个简短的会话标题。
+要求：
+- 使用与用户输入相同的主要语言。
+- 不超过50个字符。
+- 只输出标题，不要解释，不要添加“标题：”前缀，不要使用引号。"""
 
 
 # 建议问题 提示词
@@ -103,8 +53,7 @@ SUGGESTED_QUESTIONS_TEMPLATE = "请根据历史信息预测人类最后可能会
 
 
 class SuggestedQuestions(BaseModel):
-    """请预测人类最可能会问的三个问题，并且每个问题都保持在50个字符以内。
-    生成的内容必须是指定模式的JSON格式数组: ["问题1", "问题2", "问题3"]"""
+    """请预测人类最可能会问的三个问题，每个问题不超过50个字符。"""
     questions: list[str] = Field(description="建议问题列表，类型为字符串数组")
 
 

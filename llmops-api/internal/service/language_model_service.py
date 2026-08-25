@@ -41,6 +41,8 @@ class LanguageModelService(BaseService):
             models = convert_model_to_dict(model_entities)
             for model in models:
                 model.pop("visible", None)
+                model.pop("structured_output_strategy", None)
+                model.pop("structured_output_strict", None)
 
             # 构建响应字典结构
             language_model = {
@@ -72,6 +74,8 @@ class LanguageModelService(BaseService):
         # 3.构建数据并响应
         model = convert_model_to_dict(model_entity)
         model.pop("visible", None)
+        model.pop("structured_output_strategy", None)
+        model.pop("structured_output_strict", None)
         return model
 
     def get_language_model_icon(self, provider_name: str) -> tuple[bytes, str]:

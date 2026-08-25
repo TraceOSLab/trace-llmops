@@ -13,7 +13,7 @@ from uuid import UUID
 
 from flask import Flask
 from injector import inject
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.output_parsers import PydanticOutputParser, StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
 from internal.core.agent.entities.queue_entity import AgentThought, QueueEvent
@@ -21,7 +21,6 @@ from internal.core.language_model import LanguageModelManager
 from internal.entity.conversation_entity import (
     SUMMARIZER_TEMPLATE,
     CONVERSATION_NAME_TEMPLATE,
-    ConversationInfo,
     SUGGESTED_QUESTIONS_TEMPLATE,
     SuggestedQuestions,
     InvokeFrom,
@@ -60,65 +59,64 @@ class ConversationService(BaseService):
 
     def generate_conversation_name(self, query: str) -> str:
         """根据 query 生成当前 会话名称"""
-
-        # 提示词 注意：语言与用户的输入保持一致
-        prompt = ChatPromptTemplate.from_messages(
-            [("system", CONVERSATION_NAME_TEMPLATE), ("human", "{query}")]
-        )
-        llm = self.language_model_manager.create_system_chat_model(
-            {"temperature": 0}
-        )
-        structured_llm = llm.with_structured_output(ConversationInfo)
-        chain = prompt | structured_llm
-
+        fallback_name = self._normalize_conversation_name(query, "新的对话")
         # 提取query 截取过长的部分
         if len(query) > 2000:
             query = query[:300] + "...[TRUNCATED]" + query[-300:]
         query = query.replace("\n", " ")
-        conversation_info = chain.invoke({"query": query})
-
-        # 提取 会话名称
-        name = "新的对话"
         try:
-            if conversation_info and hasattr(conversation_info, "subject"):
-                name = conversation_info.subject
-        except Exception as e:
-            logging.exception(
-                f"提取会话名称错误，conversation_info:{conversation_info},错误信息：{str(e)}"
+            prompt = ChatPromptTemplate.from_messages(
+                [("system", CONVERSATION_NAME_TEMPLATE), ("human", "{query}")]
             )
+            llm = self.language_model_manager.create_system_chat_model(
+                {"temperature": 0}
+            )
+            chain = prompt | llm | StrOutputParser()
+            generated_name = chain.invoke({"query": query})
+            return self._normalize_conversation_name(
+                generated_name, fallback_name
+            )
+        except Exception:
+            logging.exception("生成会话名称失败，已回退为用户问题摘要")
+            return fallback_name
 
-        if len(name) > 50:
-            name = name[:50] + "..."
-
-        return name
+    @staticmethod
+    def _normalize_conversation_name(name: str, fallback: str) -> str:
+        """清理模型标题，并确保始终返回可用的短标题。"""
+        normalized_name = " ".join((name or "").split()).strip("`'\"")
+        if not normalized_name:
+            normalized_name = fallback
+        if len(normalized_name) > 50:
+            normalized_name = normalized_name[:50] + "..."
+        return normalized_name
 
     def generate_suggested_questions(self, histories: str) -> list[str]:
         """根据历史信息生成 建议问题（不超过3条）"""
 
-        prompt = ChatPromptTemplate.from_messages(
-            [("system", SUGGESTED_QUESTIONS_TEMPLATE), ("human", "{histories}")]
-        )
-        llm = self.language_model_manager.create_system_chat_model(
-            {"temperature": 0}
-        )
-        structured_llm = llm.with_structured_output(SuggestedQuestions)
-        chain = prompt | structured_llm
-        suggested_questions = chain.invoke({"histories": histories})
-
-        # 建议问题 提取
-        questions = []
+        parser = PydanticOutputParser(pydantic_object=SuggestedQuestions)
+        prompt = ChatPromptTemplate.from_messages([
+            (
+                "system",
+                SUGGESTED_QUESTIONS_TEMPLATE + "\n{format_instructions}",
+            ),
+            ("human", "{histories}"),
+        ]).partial(format_instructions=parser.get_format_instructions())
         try:
-            if suggested_questions and hasattr(suggested_questions, "questions"):
-                questions = suggested_questions.questions
-        except Exception as e:
-            logging.exception(
-                f"生成建议问题错误，suggested_questions:{suggested_questions}, 错误信息:{str(e)}"
+            structured_llm = (
+                self.language_model_manager.create_system_structured_chat_model(
+                    SuggestedQuestions,
+                    {"temperature": 0},
+                    max_attempts=2,
+                )
             )
+            chain = prompt | structured_llm
+            suggested_questions = chain.invoke({"histories": histories})
+            questions = suggested_questions.questions
+        except Exception:
+            logging.exception("生成建议问题失败，已回退为空列表")
+            return []
 
-        if len(questions) > 3:
-            questions = questions[:3]
-
-        return questions
+        return questions[:3]
 
     def save_agent_thoughts(
         self,
@@ -181,10 +179,17 @@ class ConversationService(BaseService):
 
                     # 更新长期记忆
                     if app_config["long_term_memory"]["enable"]:
-                        new_summary = self.summary(
-                            message.query, agent_thought.answer, conversation.summary
-                        )
-                        self.update(conversation, summary=new_summary)
+                        try:
+                            new_summary = self.summary(
+                                message.query,
+                                agent_thought.answer,
+                                conversation.summary,
+                            )
+                            self.update(conversation, summary=new_summary)
+                        except Exception:
+                            logging.exception(
+                                "更新会话摘要失败，继续保存消息和其他辅助信息"
+                            )
 
                     # 生成会话名称
                     if conversation.is_new:

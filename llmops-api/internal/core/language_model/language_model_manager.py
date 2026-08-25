@@ -12,7 +12,10 @@ from typing import Any, Mapping, Optional, Type
 
 import yaml
 from injector import inject, singleton
-from pydantic import BaseModel, Field, model_validator
+from langchain_core.exceptions import OutputParserException
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.runnables import Runnable, RunnableLambda
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from internal.exception.exception import NotFoundException, ValidateErrorException
 from .entities.provider_entity import Provider, ProviderEntity
@@ -22,6 +25,7 @@ from .entities.model_entity import (
     ModelParameter,
     ModelParameterType,
     ModelType,
+    StructuredOutputStrategy,
 )
 
 
@@ -196,12 +200,82 @@ class LanguageModelManager(BaseModel):
     ) -> BaseLanguageModel:
         """创建不隶属于特定应用的系统辅助模型。"""
         return self.create_chat_model(
-            {
-                "provider": os.getenv("SYSTEM_LLM_PROVIDER", "openai"),
-                "model": os.getenv("SYSTEM_LLM_MODEL", "gpt-4o-mini"),
-                "parameters": dict(parameters or {}),
-            }
+            self._get_system_model_config(parameters)
         )
+
+    def create_structured_chat_model(
+        self,
+        model_config: Mapping[str, Any] | LanguageModelConfig,
+        schema: type[BaseModel],
+        max_attempts: int = 2,
+    ) -> Runnable[Any, BaseModel]:
+        """按模型目录声明的策略创建带校验和有限重试的结构化模型。"""
+        if max_attempts < 1:
+            raise ValidateErrorException("结构化输出尝试次数不能小于1")
+
+        config = self.validate_model_config(model_config)
+        provider = self.get_provider(config.provider)
+        model_entity = provider.get_model_entity(config.model)
+        provider_entity = provider.provider_entity
+        strategy = (
+            model_entity.structured_output_strategy
+            or provider_entity.structured_output_strategy
+        )
+        strict = (
+            model_entity.structured_output_strict
+            if model_entity.structured_output_strict is not None
+            else provider_entity.structured_output_strict
+        )
+        llm = self.create_chat_model(config)
+
+        if strategy == StructuredOutputStrategy.PROMPT:
+            structured_model = llm | PydanticOutputParser(
+                pydantic_object=schema
+            )
+        else:
+            structured_kwargs: dict[str, Any] = {"method": strategy.value}
+            if strategy == StructuredOutputStrategy.JSON_SCHEMA:
+                structured_kwargs["strict"] = strict
+            structured_model = llm.with_structured_output(
+                schema, **structured_kwargs
+            )
+
+        def validate_structured_output(output: Any) -> BaseModel:
+            if isinstance(output, schema):
+                return output
+            return schema.model_validate(output)
+
+        validated_model = structured_model | RunnableLambda(
+            validate_structured_output
+        )
+        return validated_model.with_retry(
+            retry_if_exception_type=(ValidationError, OutputParserException),
+            wait_exponential_jitter=False,
+            stop_after_attempt=max_attempts,
+        )
+
+    def create_system_structured_chat_model(
+        self,
+        schema: type[BaseModel],
+        parameters: Optional[Mapping[str, Any]] = None,
+        max_attempts: int = 2,
+    ) -> Runnable[Any, BaseModel]:
+        """使用系统默认模型创建结构化输出模型。"""
+        return self.create_structured_chat_model(
+            self._get_system_model_config(parameters),
+            schema,
+            max_attempts=max_attempts,
+        )
+
+    @staticmethod
+    def _get_system_model_config(
+        parameters: Optional[Mapping[str, Any]] = None,
+    ) -> dict[str, Any]:
+        return {
+            "provider": os.getenv("SYSTEM_LLM_PROVIDER", "openai"),
+            "model": os.getenv("SYSTEM_LLM_MODEL", "gpt-4o-mini"),
+            "parameters": dict(parameters or {}),
+        }
 
     @staticmethod
     def _validate_parameter_value(

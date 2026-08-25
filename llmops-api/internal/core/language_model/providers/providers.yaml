@@ -5,6 +5,8 @@
   background: '#E5E7EB'
   api_key_env: OPENAI_API_KEY
   base_url_env: OPENAI_API_BASE
+  structured_output_strategy: json_schema
+  structured_output_strict: true
   supported_model_types:
     - chat
     - completion
@@ -15,6 +17,7 @@
   background: '#EEF2FF'
   api_key_env: DEEPSEEK_API_KEY
   base_url: https://api.deepseek.com
+  structured_output_strategy: json_mode
   supported_model_types:
     - chat
 - name: moonshot
@@ -24,6 +27,7 @@
   background: '#FFFFFF'
   api_key_env: MOONSHOT_API_KEY
   base_url: https://api.moonshot.cn/v1
+  structured_output_strategy: function_calling
   supported_model_types:
     - chat
 - name: doubao
@@ -33,6 +37,7 @@
   background: '#FFF1F2'
   api_key_env: ARK_API_KEY
   base_url: https://ark.cn-beijing.volces.com/api/v3
+  structured_output_strategy: function_calling
   supported_model_types:
     - chat
 - name: zhipu
@@ -42,6 +47,7 @@
   background: '#EFF6FF'
   api_key_env: ZHIPU_API_KEY
   base_url: https://open.bigmodel.cn/api/paas/v4/
+  structured_output_strategy: function_calling
   supported_model_types:
     - chat
 - name: ollama
@@ -49,6 +55,7 @@
   description: Ollama提供的本地离线大语言模型，例如qwen2.5-7b等。
   icon: icon.svg
   background: '#F9FAFB'
+  structured_output_strategy: json_schema
   supported_model_types:
     - chat
 - name: tongyi
@@ -57,6 +64,7 @@
   icon: icon.png
   background: '#FFFFFF'
   visible: false
+  structured_output_strategy: function_calling
   supported_model_types:
     - chat
 - name: wenxin
@@ -65,5 +73,6 @@
   icon: icon.png
   background: '#FFFFFF'
   visible: false
+  structured_output_strategy: function_calling
   supported_model_types:
     - chat

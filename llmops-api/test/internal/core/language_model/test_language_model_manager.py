@@ -1,8 +1,10 @@
 from pathlib import Path
 
 import pytest
+from langchain_core.runnables import RunnableLambda
 
 from internal.core.language_model import LanguageModelManager
+from internal.entity.conversation_entity import SuggestedQuestions
 from internal.exception import ValidateErrorException
 
 
@@ -15,6 +17,7 @@ VISIBLE_MODELS = {
         "doubao-seed-2-0-lite-260215",
     ],
     "zhipu": ["glm-5.2", "glm-4.5-flash"],
+    "ollama": ["qwen2.5-7b"],
 }
 
 PROVIDER_ENV = {
@@ -23,6 +26,15 @@ PROVIDER_ENV = {
     "moonshot": "MOONSHOT_API_KEY",
     "doubao": "ARK_API_KEY",
     "zhipu": "ZHIPU_API_KEY",
+}
+
+STRUCTURED_OUTPUT_STRATEGIES = {
+    "openai": ("json_schema", True),
+    "deepseek": ("json_mode", False),
+    "moonshot": ("function_calling", False),
+    "doubao": ("function_calling", False),
+    "zhipu": ("function_calling", False),
+    "ollama": ("json_schema", False),
 }
 
 
@@ -65,7 +77,8 @@ def test_visible_provider_icons_exist(manager):
 
 @pytest.mark.parametrize("provider", list(VISIBLE_MODELS))
 def test_factory_builds_provider_model_without_network(monkeypatch, manager, provider):
-    monkeypatch.setenv(PROVIDER_ENV[provider], "test-key")
+    if provider in PROVIDER_ENV:
+        monkeypatch.setenv(PROVIDER_ENV[provider], "test-key")
     model_name = VISIBLE_MODELS[provider][0]
     temperature = 1 if provider == "moonshot" else 0.5
 
@@ -77,12 +90,28 @@ def test_factory_builds_provider_model_without_network(monkeypatch, manager, pro
         }
     )
 
-    assert llm.model_name == model_name
     assert llm.temperature == temperature
     if provider == "deepseek":
+        assert llm.model_name == model_name
         assert "langchain_deepseek" in type(llm).__mro__[1].__module__
+    elif provider == "ollama":
+        assert llm.model == "qwen2.5:7b"
+        assert "langchain_ollama" in type(llm).__mro__[1].__module__
     else:
+        assert llm.model_name == model_name
         assert "langchain_openai" in type(llm).__mro__[1].__module__
+
+
+def test_ollama_maps_max_tokens_to_num_predict(manager):
+    llm = manager.create_chat_model(
+        {
+            "provider": "ollama",
+            "model": "qwen2.5-7b",
+            "parameters": {"max_tokens": 1024},
+        }
+    )
+
+    assert llm.num_predict == 1024
 
 
 @pytest.mark.parametrize(
@@ -192,10 +221,108 @@ def test_system_model_uses_environment_selection(monkeypatch, manager):
     assert llm.temperature == 0
 
 
+def test_structured_output_catalog_uses_provider_specific_strategies(manager):
+    assert {
+        provider_name: (
+            manager.get_provider(
+                provider_name
+            ).provider_entity.structured_output_strategy.value,
+            manager.get_provider(
+                provider_name
+            ).provider_entity.structured_output_strict,
+        )
+        for provider_name in STRUCTURED_OUTPUT_STRATEGIES
+    } == STRUCTURED_OUTPUT_STRATEGIES
+
+
+@pytest.mark.parametrize(
+    ("provider_name", "expected_method", "expected_strict"),
+    [
+        (provider_name, *strategy)
+        for provider_name, strategy in STRUCTURED_OUTPUT_STRATEGIES.items()
+    ],
+)
+def test_structured_factory_applies_declared_strategy(
+    monkeypatch,
+    manager,
+    provider_name,
+    expected_method,
+    expected_strict,
+):
+    captured = {}
+
+    class FakeChatModel:
+        def with_structured_output(self, schema, **kwargs):
+            captured.update(schema=schema, kwargs=kwargs)
+            return RunnableLambda(
+                lambda _input: SuggestedQuestions(questions=[])
+            )
+
+    monkeypatch.setattr(
+        LanguageModelManager,
+        "create_chat_model",
+        lambda _self, _config: FakeChatModel(),
+    )
+
+    structured_model = manager.create_structured_chat_model(
+        {
+            "provider": provider_name,
+            "model": VISIBLE_MODELS[provider_name][0],
+        },
+        SuggestedQuestions,
+    )
+
+    assert structured_model.invoke("history").questions == []
+    assert captured["schema"] is SuggestedQuestions
+    assert captured["kwargs"]["method"] == expected_method
+    if expected_method == "json_schema":
+        assert captured["kwargs"]["strict"] is expected_strict
+    else:
+        assert "strict" not in captured["kwargs"]
+
+
+def test_structured_factory_retries_schema_validation_once(
+    monkeypatch, manager
+):
+    attempts = 0
+
+    class FakeChatModel:
+        def with_structured_output(self, _schema, **_kwargs):
+            def invoke(_input):
+                nonlocal attempts
+                attempts += 1
+                if attempts == 1:
+                    return None
+                return {"questions": ["下一步是什么？"]}
+
+            return RunnableLambda(invoke)
+
+    monkeypatch.setattr(
+        LanguageModelManager,
+        "create_chat_model",
+        lambda _self, _config: FakeChatModel(),
+    )
+
+    structured_model = manager.create_structured_chat_model(
+        {"provider": "zhipu", "model": "glm-5.2"},
+        SuggestedQuestions,
+        max_attempts=2,
+    )
+
+    result = structured_model.invoke("history")
+
+    assert attempts == 2
+    assert result.questions == ["下一步是什么？"]
+
+
 def test_provider_sdks_are_confined_to_language_model_core():
     internal_path = Path(__file__).parents[4] / "internal"
     provider_path = internal_path / "core" / "language_model" / "providers"
-    forbidden_imports = ("langchain_openai", "langchain_deepseek")
+    forbidden_imports = (
+        "langchain_openai",
+        "langchain_deepseek",
+        "langchain_ollama",
+    )
 
     offenders = []
     for python_file in internal_path.rglob("*.py"):

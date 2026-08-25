@@ -29,6 +29,15 @@ class ModelType(str, Enum):
     COMPLETION = "completion"  # 文本生成模型
 
 
+class StructuredOutputStrategy(str, Enum):
+    """模型生成结构化结果时使用的约束方式。"""
+
+    JSON_SCHEMA = "json_schema"
+    FUNCTION_CALLING = "function_calling"
+    JSON_MODE = "json_mode"
+    PROMPT = "prompt"
+
+
 class ModelParameterType(str, Enum):
     """模型参数类型"""
 
@@ -83,6 +92,8 @@ class ModelEntity(BaseModel):
         default_factory=dict
     )  # 模型元数据 存储模型额外数据
     visible: bool = True  # 是否在模型列表中展示；隐藏模型仍可兼容已有配置
+    structured_output_strategy: Optional[StructuredOutputStrategy] = None
+    structured_output_strict: Optional[bool] = None
 
 
 class LanguageModelConfig(BaseModel):

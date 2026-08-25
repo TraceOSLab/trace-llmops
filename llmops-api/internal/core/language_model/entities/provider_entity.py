@@ -18,7 +18,12 @@ from internal.exception.exception import FailException, NotFoundException
 from internal.lib.helper import dynamic_import
 from pydantic import BaseModel, Field, model_validator
 
-from .model_entity import ModelEntity, ModelType, BaseLanguageModel
+from .model_entity import (
+    BaseLanguageModel,
+    ModelEntity,
+    ModelType,
+    StructuredOutputStrategy,
+)
 
 
 class ProviderEntity(BaseModel):
@@ -36,6 +41,10 @@ class ProviderEntity(BaseModel):
     api_key_env: str = ""  # API Key 对应的环境变量名
     base_url: str = ""  # Provider 默认 API 地址
     base_url_env: str = ""  # 可覆盖默认地址的环境变量名
+    structured_output_strategy: StructuredOutputStrategy = (
+        StructuredOutputStrategy.FUNCTION_CALLING
+    )
+    structured_output_strict: bool = False
 
 
 class Provider(BaseModel):
@@ -100,6 +109,10 @@ class Provider(BaseModel):
                     default_parameter = DEFAULT_MODEL_PARAMETER_TEMPLATE.get(
                         use_template
                     )
+                    if default_parameter is None:
+                        raise FailException(
+                            f"模型{model_name}引用了不存在的参数模板: {use_template}"
+                        )
                     del parameter["use_template"]
                     parameters.append({**default_parameter, **parameter})
                 else:

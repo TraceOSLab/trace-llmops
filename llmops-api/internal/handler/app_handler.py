@@ -236,7 +236,6 @@ class AppHandler:
             tools = [
                 self.builtin_provider_manager.get_tool("google", "google_serper")(),
                 self.builtin_provider_manager.get_tool("gaode", "gaode_weather")(),
-                self.builtin_provider_manager.get_tool("dalle", "dalle3")(),
             ]
 
             # 创建聊天、工具、路由节点
