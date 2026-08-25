@@ -44,6 +44,13 @@
   base_url: https://open.bigmodel.cn/api/paas/v4/
   supported_model_types:
     - chat
+- name: ollama
+  label: Ollama
+  description: Ollama提供的本地离线大语言模型，例如qwen2.5-7b等。
+  icon: icon.svg
+  background: '#F9FAFB'
+  supported_model_types:
+    - chat
 - name: tongyi
   label: 通义千问
   description: 通义千问提供的模型，例如千问-max、千问-plus等。

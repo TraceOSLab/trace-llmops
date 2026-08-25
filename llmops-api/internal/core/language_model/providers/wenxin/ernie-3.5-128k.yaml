@@ -5,7 +5,7 @@ features:
   - tool_call
   - agent_thought
 context_window: 128000
-max_output_tokens: 8196
+max_output_tokens: 8192
 attributes:
   model: ERNIE-3.5-128K
 parameters:
@@ -22,7 +22,7 @@ parameters:
   - name: max_output_tokens
     use_template: max_completion_tokens
     default: 4096
-    max: 8196
+    max: 8192
   - name: disable_search
     label: 禁用搜索
     type: boolean
