@@ -22,6 +22,7 @@ from .segment_handler import SegmentHandler
 from .upload_file_handler import UploadFileHandler
 from .workflow_handler import WorkflowHandler
 from .language_model_handler import LanguageModelHandler
+from .assistant_agent_handler import AssistantAgentHandler
 
 __all__ = [
     "AuthHandler",
@@ -40,4 +41,5 @@ __all__ = [
     "OpenApiHandler",
     "WorkflowHandler",
     "LanguageModelHandler",
+    "AssistantAgentHandler",
 ]

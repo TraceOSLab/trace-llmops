@@ -5,6 +5,7 @@
 @Time   :   2026/1/21 11:07
 @Author :   s.qiu@foxmail.com
 """
+
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -54,18 +55,22 @@ SUGGESTED_QUESTIONS_TEMPLATE = "请根据历史信息预测人类最后可能会
 
 class SuggestedQuestions(BaseModel):
     """请预测人类最可能会问的三个问题，每个问题不超过50个字符。"""
+
     questions: list[str] = Field(description="建议问题列表，类型为字符串数组")
 
 
 class InvokeFrom(str, Enum):
     """会话调用来源"""
+
     SERVICE_API = "service_api"  # 开放api服务调用
     WEB_APP = "web_app"  # web应用
     DEBUGGER = "debugger"  # 调试页面
+    ASSISTANT_AGENT = "assistant_agent"  # 辅助Agent调用
 
 
 class MessageStatus(str, Enum):
     """会话状态"""
+
     NORMAL = "normal"  # 正常
     STOP = "stop"  # 停止
     ERROR = "error"  # 出错

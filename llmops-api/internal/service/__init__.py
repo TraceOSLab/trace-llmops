@@ -32,6 +32,7 @@ from .segment_service import SegmentService
 from .upload_file_service import UploadFileService
 from .vector_database_service import VectorDatabaseService
 from .workflow_service import WorkflowService
+from .assistant_agent_service import  AssistantAgentService
 
 __all__ = [
     "JWTService",
@@ -60,4 +61,5 @@ __all__ = [
     "ApiKeyService",
     "OpenApiService",
     "WorkflowService",
+    "AssistantAgentService"
 ]
