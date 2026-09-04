@@ -2,9 +2,13 @@ from dataclasses import dataclass
 
 from flask_login import current_user
 from injector import inject
-
+from uuid import UUID
 from internal.schema.assistant_agent_schema import AssistantAgentChat
-from pkg.response.response import compact_generate_response, validate_error_json
+from pkg.response.response import (
+    compact_generate_response,
+    success_message,
+    validate_error_json,
+)
 from internal.service import AssistantAgentService
 
 
@@ -25,3 +29,8 @@ class AssistantAgentHandler:
         response = self.assistant_agent_service.chat(req.query.data, current_user)
 
         return compact_generate_response(response)
+
+    def stop_assistant_agent_chat(self, task_id: UUID):
+        """辅助智能体停止会话"""
+        self.assistant_agent_service.stop_assistant_agent_chat(task_id, current_user)
+        return success_message("停止会话成功")

@@ -1,14 +1,24 @@
 from dataclasses import dataclass
+from gc import enable
+import json
+from threading import Thread
+from uuid import UUID
 
 from flask import current_app
 from injector import inject
+from langchain_core.messages import HumanMessage
 
+from internal.core.agent.agents.agent_queue_manager import AgentQueueManager
+from internal.core.agent.agents.function_call_agent import FunctionCallAgent
+from internal.core.agent.entities.agent_entity import AgentConfig
+from internal.core.agent.entities.queue_entity import QueueEvent
 from internal.core.language_model.language_model_manager import LanguageModelManager
 from internal.core.memory.token_buffer_memory import TokenBufferMemory
 from internal.entity.conversation_entity import InvokeFrom, MessageStatus
 from internal.model.account import Account
 from internal.model.conversation import Message
 from internal.service.base_service import BaseService
+from internal.service.conversation_service import ConversationService
 from pkg.sqlalchemy import SQLAlchemy
 
 
@@ -19,6 +29,7 @@ class AssistantAgentService(BaseService):
 
     db: SQLAlchemy
     language_model_manager: LanguageModelManager
+    conversation_service: ConversationService
 
     def chat(self, query, account: Account):
         """辅助智能体对话"""
@@ -48,3 +59,86 @@ class AssistantAgentService(BaseService):
             model_instance=llm,
         )
         history = token_buffer_memory.get_history_prompt_messages(message_limit=3)
+
+        # 构建智能体
+        agent = FunctionCallAgent(
+            llm=llm,
+            agent_config=AgentConfig(
+                user_id=account.id,
+                invoke_from=InvokeFrom.ASSISTANT_AGENT,
+                enable_long_term_memory=True,
+                tools=[],
+            ),
+        )
+
+        # 提取 agent_thought
+        agent_thoughts = {}
+        for agent_thought in agent.stream(
+            {
+                "messages": [HumanMessage(query)],
+                "history": history,
+                "long_term_memory": conversation.summary,
+            }
+        ):
+            event_id = str(agent_thought.id)
+
+            # 将数据填充到agent_thought
+            if agent_thought.event != QueueEvent.PING:
+                # 处理 agent_message 数据为叠加
+                if agent_thought.event == QueueEvent.AGENT_MESSAGE:
+                    if event_id not in agent_thoughts:
+                        agent_thoughts[event_id] = agent_thought
+                    else:
+                        # 叠加智能体消息
+                        agent_thoughts[event_id] = agent_thoughts[event_id].model_copy(
+                            update={
+                                "thought": agent_thoughts[event_id].thought
+                                + agent_thought.thought,
+                                "answer": agent_thoughts[event_id].answer
+                                + agent_thought.answer,
+                                "latency": agent_thought.latency,
+                            }
+                        )
+                else:
+                    # 处理其他类型事件的消息
+                    agent_thoughts[event_id] = agent_thought
+            data = {
+                **agent_thought.model_dump(
+                    include={
+                        "event",
+                        "thought",
+                        "observation",
+                        "tool",
+                        "tool_input",
+                        "answer",
+                        "latency",
+                    }
+                ),
+                "id": event_id,
+                "conversation_id": str(conversation.id),
+                "message_id": str(message.id),
+                "task_id": str(agent_thought.task_id),
+            }
+            yield f"event: {agent_thought.event}\ndata:{json.dumps(data)}\n\n"
+
+        thread = Thread(
+            target=self.conversation_service.save_agent_thoughts,
+            kwargs={
+                "flask_app": current_app._get_current_object(),
+                "account_id": account.id,
+                "app_id": assistant_agent_id,
+                "app_config": {
+                    "long_term_memory": {"enable": True},
+                },
+                "conversation_id": conversation.id,
+                "message_id": message.id,
+                "agent_thoughts": [
+                    agent_thought for agent_thought in agent_thoughts.values()
+                ],
+            },
+        )
+        thread.start()
+
+    def stop_assistant_agent_chat(self, task_id: UUID, account: Account):
+        """辅助智能体停止会话"""
+        AgentQueueManager.set_stop_flag(task_id, InvokeFrom.ASSISTANT_AGENT, account.id)

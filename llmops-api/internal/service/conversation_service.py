@@ -43,9 +43,7 @@ class ConversationService(BaseService):
     ) -> str:
         """根据消息和旧的摘要生成 新摘要"""
         prompt = ChatPromptTemplate.from_template(SUMMARIZER_TEMPLATE)
-        llm = self.language_model_manager.create_system_chat_model(
-            {"temperature": 0.5}
-        )
+        llm = self.language_model_manager.create_system_chat_model({"temperature": 0.5})
         # 构建链应用
         chain = prompt | llm | StrOutputParser()
         new_summary = chain.invoke(
@@ -73,9 +71,7 @@ class ConversationService(BaseService):
             )
             chain = prompt | llm | StrOutputParser()
             generated_name = chain.invoke({"query": query})
-            return self._normalize_conversation_name(
-                generated_name, fallback_name
-            )
+            return self._normalize_conversation_name(generated_name, fallback_name)
         except Exception:
             logging.exception("生成会话名称失败，已回退为用户问题摘要")
             return fallback_name
@@ -94,13 +90,15 @@ class ConversationService(BaseService):
         """根据历史信息生成 建议问题（不超过3条）"""
 
         parser = PydanticOutputParser(pydantic_object=SuggestedQuestions)
-        prompt = ChatPromptTemplate.from_messages([
-            (
-                "system",
-                SUGGESTED_QUESTIONS_TEMPLATE + "\n{format_instructions}",
-            ),
-            ("human", "{histories}"),
-        ]).partial(format_instructions=parser.get_format_instructions())
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    SUGGESTED_QUESTIONS_TEMPLATE + "\n{format_instructions}",
+                ),
+                ("human", "{histories}"),
+            ]
+        ).partial(format_instructions=parser.get_format_instructions())
         try:
             structured_llm = (
                 self.language_model_manager.create_system_structured_chat_model(
