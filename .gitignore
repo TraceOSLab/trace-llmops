@@ -25,4 +25,5 @@ llmops-api/internal/core/embeddings/*
 __pycache__/
 *.pyc
 
-# 前端
+# 文档
+docs/
