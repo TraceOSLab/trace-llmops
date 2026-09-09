@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from gc import enable
 import json
 from threading import Thread
@@ -7,6 +8,7 @@ from uuid import UUID
 from flask import current_app
 from injector import inject
 from langchain_core.messages import HumanMessage
+from sqlalchemy import desc
 
 from internal.core.agent.agents.agent_queue_manager import AgentQueueManager
 from internal.core.agent.agents.function_call_agent import FunctionCallAgent
@@ -17,8 +19,10 @@ from internal.core.memory.token_buffer_memory import TokenBufferMemory
 from internal.entity.conversation_entity import InvokeFrom, MessageStatus
 from internal.model.account import Account
 from internal.model.conversation import Message
+from internal.schema.assistant_agent_schema import GetAssistantAgentMessagesWithPageReq
 from internal.service.base_service import BaseService
 from internal.service.conversation_service import ConversationService
+from pkg.paginator.paginator import Paginator
 from pkg.sqlalchemy import SQLAlchemy
 
 
@@ -141,4 +145,37 @@ class AssistantAgentService(BaseService):
 
     def stop_assistant_agent_chat(self, task_id: UUID, account: Account):
         """辅助智能体停止会话"""
+
         AgentQueueManager.set_stop_flag(task_id, InvokeFrom.ASSISTANT_AGENT, account.id)
+
+    def get_assistant_agent_messages_with_page(
+        self, req: GetAssistantAgentMessagesWithPageReq, account: Account
+    ) -> tuple[list[Message], Paginator]:
+        """辅助智能体消息分页列表"""
+        # 获取应用的调试会话
+        conversation = account.assistant_agent_conversation
+
+        # 构建分页器
+        paginator = Paginator(db=self.db, req=req)
+        filters = []
+        if req.created_at.data:
+            # 将时间戳转换成DateTime
+            created_at_datetime = datetime.fromtimestamp(req.created_at.data)
+            filters.append(Message.created_at <= created_at_datetime)
+
+        messages = paginator.paginate(
+            self.db.session.query(Message)
+            .filter(
+                Message.conversation_id == conversation.id,
+                Message.status.in_([MessageStatus.STOP, MessageStatus.NORMAL]),
+                Message.answer != "",
+                *filters,
+            )
+            .order_by(desc("created_at"))
+        )
+
+        return messages, paginator
+
+    def delete_assistant_agent_conversation(self, account: Account):
+        """清空辅助Agent智能体会话消息列表"""
+        self.update(account, assistant_agent_conversation_id=None)

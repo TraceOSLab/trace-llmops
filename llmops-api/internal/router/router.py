@@ -476,15 +476,15 @@ class Router:
             methods=["POST"],
             view_func=self.assistant_agent_handler.stop_assistant_agent_chat,
         )
-        # bp.add_url_rule(
-        #     "/assistant-agent/messages",
-        #     # view_func=self.assistant_agent_handler.get_assistant_agent_messages_with_page,
-        # )
-        # bp.add_url_rule(
-        #     "/assistant-agent/delete-conversation",
-        #     methods=["POST"],
-        #     # view_func=self.assistant_agent_handler.delete_assistant_agent_conversation,
-        # )
+        bp.add_url_rule(
+            "/assistant-agent/messages",
+            view_func=self.assistant_agent_handler.get_assistant_agent_messages_with_page,
+        )
+        bp.add_url_rule(
+            "/assistant-agent/delete-conversation",
+            methods=["POST"],
+            view_func=self.assistant_agent_handler.delete_assistant_agent_conversation,
+        )
 
         # 在应用上注册蓝图
         app.register_blueprint(bp)
