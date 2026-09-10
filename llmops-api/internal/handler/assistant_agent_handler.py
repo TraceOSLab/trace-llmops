@@ -32,7 +32,7 @@ class AssistantAgentHandler:
         if not req.validate():
             return validate_error_json(req.errors)
 
-        response = self.assistant_agent_service.chat(req.query.data, current_user)
+        response = self.assistant_agent_service.assistant_agent_chat(req.query.data, current_user)
 
         return compact_generate_response(response)
 

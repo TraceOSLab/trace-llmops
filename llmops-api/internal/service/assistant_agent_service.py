@@ -35,7 +35,7 @@ class AssistantAgentService(BaseService):
     language_model_manager: LanguageModelManager
     conversation_service: ConversationService
 
-    def chat(self, query, account: Account):
+    def assistant_agent_chat(self, query, account: Account):
         """辅助智能体对话"""
         assistant_agent_id = current_app.config.get("ASSISTANT_AGENT_ID")
 
@@ -64,6 +64,12 @@ class AssistantAgentService(BaseService):
         )
         history = token_buffer_memory.get_history_prompt_messages(message_limit=3)
 
+        # 将草稿配置中的tools转换成LangChain工具
+        tools = [
+            # self.faiss_service.convert_faiss_to_tool(),
+            # self.convert_create_app_to_tool(account.id),
+        ]
+
         # 构建智能体
         agent = FunctionCallAgent(
             llm=llm,
@@ -71,7 +77,7 @@ class AssistantAgentService(BaseService):
                 user_id=account.id,
                 invoke_from=InvokeFrom.ASSISTANT_AGENT,
                 enable_long_term_memory=True,
-                tools=[],
+                tools=tools,
             ),
         )
 
