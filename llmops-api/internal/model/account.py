@@ -73,12 +73,12 @@ class Account(UserMixin, db.Model):
 
         assistant_conversation = (
             db.session.query(Conversation).get(self.assistant_agent_conversation_id)
-            if assistant_agent_id
+            if self.assistant_agent_conversation_id
             else None
         )
 
         if not self.assistant_agent_conversation_id or not assistant_conversation:
-            with db.auto_commit:
+            with db.auto_commit():
                 assistant_conversation = Conversation(
                     app_id=assistant_agent_id,
                     name="New Conversation",
@@ -87,9 +87,12 @@ class Account(UserMixin, db.Model):
                 )
                 db.session.add(assistant_conversation)
                 db.session.flush()
+
                 # 更新最新的 id
                 self.assistant_agent_conversation_id = assistant_conversation.id
-
+                print("id:", assistant_conversation.id)
+                print("modified:", db.session.is_modified(self))
+                db.session.flush()
         return assistant_conversation
 
 

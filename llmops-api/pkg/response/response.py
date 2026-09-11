@@ -5,6 +5,7 @@
 @Time   :   2025/9/10 14:13
 @Author :   s.qiu@foxmail.com
 """
+
 from dataclasses import field, dataclass
 from typing import Any, Union, Generator
 
@@ -16,6 +17,7 @@ from .http_code import HttpCode
 @dataclass
 class Response:
     """基础HTTP接口响应格式"""
+
     code: HttpCode = HttpCode.SUCCESS
     message: str = ""
     data: Any = field(default_factory=dict)

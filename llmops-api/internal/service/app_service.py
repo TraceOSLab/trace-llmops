@@ -105,8 +105,7 @@ class AppService(BaseService):
     def auto_create_app(self, name: str, description: str, account_id: UUID) -> None:
         """利用AI自动创建一个AGENT"""
         #  系统默认LLM辅助模型
-        llm = self.language_model_manager.create_system_chat_model()
-        
+        llm = self.language_model_manager.create_system_chat_model({"temperature": 0.8})
 
     def get_app(self, app_id: UUID, account: Account) -> App:
         """获取应用基础信息"""

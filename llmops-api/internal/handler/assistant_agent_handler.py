@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from flask_login import current_user
+from flask_login import current_user, login_required
 from injector import inject
 from uuid import UUID
 from internal.model.account import Account
@@ -26,21 +26,26 @@ class AssistantAgentHandler:
 
     assistant_agent_service: AssistantAgentService
 
+    @login_required
     def assistant_agent_chat(self):
         """辅助智能体对话"""
         req = AssistantAgentChat()
         if not req.validate():
             return validate_error_json(req.errors)
 
-        response = self.assistant_agent_service.assistant_agent_chat(req.query.data, current_user)
+        response = self.assistant_agent_service.assistant_agent_chat(
+            req.query.data, current_user.id
+        )
 
         return compact_generate_response(response)
 
+    @login_required
     def stop_assistant_agent_chat(self, task_id: UUID):
         """辅助智能体停止会话"""
         self.assistant_agent_service.stop_assistant_agent_chat(task_id, current_user)
         return success_message("停止会话成功")
 
+    @login_required
     def get_assistant_agent_messages_with_page(self):
         """辅助智能体会话消息分页列表"""
 
@@ -57,6 +62,7 @@ class AssistantAgentHandler:
 
         return success_json(PageModel(list=resp.dump(messages), paginator=paginator))
 
+    @login_required
     def delete_assistant_agent_conversation(self):
         """清空辅助智能体会话消息列表"""
 

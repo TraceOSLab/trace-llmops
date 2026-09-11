@@ -25,8 +25,8 @@ from internal.model.conversation import Message
 from internal.schema.assistant_agent_schema import GetAssistantAgentMessagesWithPageReq
 from internal.service.base_service import BaseService
 from internal.service.conversation_service import ConversationService
+from internal.task.app_task import auto_create_app
 from pkg.paginator.paginator import Paginator
-from pkg.response.response import success_message
 from pkg.sqlalchemy import SQLAlchemy
 
 
@@ -39,8 +39,10 @@ class AssistantAgentService(BaseService):
     language_model_manager: LanguageModelManager
     conversation_service: ConversationService
 
-    def assistant_agent_chat(self, query, account: Account):
+    def assistant_agent_chat(self, query, account_id: UUID):
         """辅助智能体对话"""
+
+        account = self.get(Account, account_id)
         assistant_agent_id = current_app.config.get("ASSISTANT_AGENT_ID")
 
         # 当前辅助智能体会话信息
@@ -58,7 +60,7 @@ class AssistantAgentService(BaseService):
         )
 
         # 使用系统默认模型作为LLM
-        llm = self.language_model_manager.create_system_chat_model(temperature=0.8)
+        llm = self.language_model_manager.create_system_chat_model({"temperature": 0.7})
 
         # 提取记忆
         token_buffer_memory = TokenBufferMemory(
@@ -71,7 +73,7 @@ class AssistantAgentService(BaseService):
         # 将草稿配置中的tools转换成LangChain工具
         tools = [
             # self.faiss_service.convert_faiss_to_tool(),
-            # self.convert_create_app_to_tool(account.id),
+            self.convert_create_app_to_tool(account.id),
         ]
 
         # 构建智能体
@@ -207,6 +209,8 @@ class AssistantAgentService(BaseService):
         @tool("create_app", args_schema=CreateAppInput)
         def create_app(name: str, description: str) -> str:
             """如果用户提出了需要创建一个Agent/应用，你可以调用此工具，参数的输入是应用的名称+描述，返回的数据是创建后的成功提示"""
+
+            auto_create_app.delay(name, description, account_id)
 
             return (
                 f"已调用异步任务创建应用。\n应用名称: {name}\n应用描述: {description}"

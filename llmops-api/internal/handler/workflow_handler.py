@@ -72,7 +72,6 @@ class WorkflowHandler:
         """更新工作流草稿配置"""
         # 提取请求的JSON数据
         draft_graph_dict = request.get_json(force=True, silent=True) or {"nodes": [], "edges": []}
-        print(draft_graph_dict)
         self.workflow_service.update_draft_graph(workflow_id, draft_graph_dict, current_user)
         return success_message("更新工作流草稿成功")
 
