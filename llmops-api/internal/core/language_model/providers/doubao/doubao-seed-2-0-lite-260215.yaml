@@ -10,6 +10,10 @@ max_output_tokens: 32768
 attributes:
   model: doubao-seed-2-0-lite-260215
 parameters:
+  - name: presence_penalty
+    use_template: presence_penalty
+  - name: frequency_penalty
+    use_template: frequency_penalty
   - name: temperature
     use_template: temperature
     default: 1

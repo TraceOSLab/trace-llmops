@@ -7,8 +7,12 @@ features:
 context_window: 131072
 max_output_tokens: 8192
 attributes:
-  model: "qwen2.5:7b"
+  model: 'qwen2.5:7b'
 parameters:
+  - name: presence_penalty
+    use_template: presence_penalty
+  - name: frequency_penalty
+    use_template: frequency_penalty
   - name: temperature
     use_template: temperature
   - name: top_p

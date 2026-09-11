@@ -10,6 +10,10 @@ max_output_tokens: 131072
 attributes:
   model: kimi-k2.6
 parameters:
+  - name: presence_penalty
+    use_template: presence_penalty
+  - name: frequency_penalty
+    use_template: frequency_penalty
   - name: temperature
     use_template: temperature
     min: 1

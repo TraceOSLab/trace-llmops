@@ -7,7 +7,10 @@ from uuid import UUID
 
 from flask import current_app
 from injector import inject
+from langchain_classic.tools import BaseTool
+from langchain_community.tools import tool
 from langchain_core.messages import HumanMessage
+from pydantic import BaseModel, Field
 from sqlalchemy import desc
 
 from internal.core.agent.agents.agent_queue_manager import AgentQueueManager
@@ -23,6 +26,7 @@ from internal.schema.assistant_agent_schema import GetAssistantAgentMessagesWith
 from internal.service.base_service import BaseService
 from internal.service.conversation_service import ConversationService
 from pkg.paginator.paginator import Paginator
+from pkg.response.response import success_message
 from pkg.sqlalchemy import SQLAlchemy
 
 
@@ -185,3 +189,27 @@ class AssistantAgentService(BaseService):
     def delete_assistant_agent_conversation(self, account: Account):
         """清空辅助Agent智能体会话消息列表"""
         self.update(account, assistant_agent_conversation_id=None)
+
+    @classmethod
+    def convert_create_app_to_tool(cls, account_id: UUID) -> BaseTool:
+        """自动创建智能体应用的 langchain 工具"""
+
+        class CreateAppInput(BaseModel):
+            """创建应用的输入结构"""
+
+            name: str = Field(
+                description="需要创建的Agent/应用名称，长度不超过50个字符"
+            )
+            description: str = Field(
+                description="需要创建的Agent/应用描述，请详细概括该应用的功能"
+            )
+
+        @tool("create_app", args_schema=CreateAppInput)
+        def create_app(name: str, description: str) -> str:
+            """如果用户提出了需要创建一个Agent/应用，你可以调用此工具，参数的输入是应用的名称+描述，返回的数据是创建后的成功提示"""
+
+            return (
+                f"已调用异步任务创建应用。\n应用名称: {name}\n应用描述: {description}"
+            )
+
+        return create_app

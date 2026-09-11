@@ -9,6 +9,10 @@ max_output_tokens: 393216
 attributes:
   model: deepseek-v4-flash
 parameters:
+  - name: presence_penalty
+    use_template: presence_penalty
+  - name: frequency_penalty
+    use_template: frequency_penalty
   - name: temperature
     use_template: temperature
     default: 1
