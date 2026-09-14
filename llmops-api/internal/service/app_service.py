@@ -6,19 +6,24 @@
 @Author :   s.qiu@foxmail.com
 """
 
+import io
 import json
 import uuid
+import requests
 from dataclasses import dataclass
 from datetime import datetime
 from threading import Thread
 from typing import Any, Generator
 from uuid import UUID
-
 from flask import current_app
 from injector import inject
+from langchain_classic.prompts import ChatPromptTemplate
+from langchain_classic.schema import StrOutputParser
 from langchain_core.messages import HumanMessage
+from langchain_core.runnables import RunnableParallel
 from redis import Redis
 from sqlalchemy import func, desc
+from werkzeug.datastructures import FileStorage
 
 from internal.core.agent.agents import FunctionCallAgent, AgentQueueManager
 from internal.core.agent.entities import AgentConfig
@@ -27,7 +32,14 @@ from internal.core.memory import TokenBufferMemory
 from internal.core.language_model import LanguageModelManager
 from internal.core.tools.api_tools.providers import ApiProviderManager
 from internal.core.tools.builtin_tools.providers import BuiltinProviderManager
-from internal.entity.app_entity import AppStatus, AppConfigType, DEFAULT_APP_CONFIG
+from langchain_community.utilities.dalle_image_generator import DallEAPIWrapper
+from internal.entity.ai_entity import OPTIMIZE_PROMPT_TEMPLATE
+from internal.entity.app_entity import (
+    GENERATE_ICON_PROMPT_TEMPLATE,
+    AppStatus,
+    AppConfigType,
+    DEFAULT_APP_CONFIG,
+)
 from internal.entity.conversation_entity import InvokeFrom, MessageStatus
 from internal.entity.dataset_entity import RetrievalSource
 from internal.exception import (
@@ -59,6 +71,7 @@ from .app_config_service import AppConfigService
 from .base_service import BaseService
 from .conversation_service import ConversationService
 from .retrieval_service import RetrievalService
+from .cos_service import CosService
 
 
 @inject
@@ -74,6 +87,7 @@ class AppService(BaseService):
     builtin_provider_manager: BuiltinProviderManager
     api_provider_manager: ApiProviderManager
     language_model_manager: LanguageModelManager
+    cos_service: CosService
 
     def create_app(self, req: CreateAppReq, account: Account) -> App:
         """个人空间新增应用"""
@@ -106,6 +120,77 @@ class AppService(BaseService):
         """利用AI自动创建一个AGENT"""
         #  系统默认LLM辅助模型
         llm = self.language_model_manager.create_system_chat_model({"temperature": 0.8})
+
+        # 构建生成 icon 链
+        dalle_api_wrapper = DallEAPIWrapper(model="dall-e-3", size="1024x1024")
+        generate_icon_chain = (
+            ChatPromptTemplate.from_template(GENERATE_ICON_PROMPT_TEMPLATE)
+            | llm
+            | StrOutputParser()
+            | dalle_api_wrapper.run
+        )
+
+        # 构建生成 Prompt 链
+        generate_preset_prompt_chain = (
+            ChatPromptTemplate.from_messages(
+                [
+                    ("system", OPTIMIZE_PROMPT_TEMPLATE),
+                    ("human", "应用名称: {name}\n\n应用描述: {description}"),
+                ]
+            )
+            | llm
+            | StrOutputParser()
+        )
+
+        # 构建并行链
+        generate_app_config_chain = RunnableParallel(
+            {
+                # "icon": generate_icon_chain,
+                "preset_prompt": generate_preset_prompt_chain,
+            }
+        )
+
+        app_config = generate_app_config_chain.invoke(
+            {"name": name, "description": description}
+        )
+
+        # 将生成图片上传到 TecentCOS 中
+        # icon_resp = requests.get(app_config.get("icon"))
+        # if icon_resp.status_code == 200:
+        #     icon_content = icon_resp.content
+        # else:
+        #     raise FailException("生成应用图标出错")
+
+        account = self.get(Account, account_id)
+        # upload_file = self.cos_service.upload_file(
+        #     FileStorage(io.BytesIo(icon_content), filename="icon.png"), True, account
+        # )
+        # icon = self.cos_service.get_file_url(upload_file.key)
+
+        # 创建应用并写入草稿配置
+        with self.db.auto_commit():
+            app = App(
+                account_id=account.id,
+                name=name,
+                icon="https://notes.qiuyouyou.cn/static/icon.png",
+                description=description,
+            )
+            self.db.session.add(app)
+            self.db.session.flush()
+
+            app_config_version = AppConfigVersion(
+                app_id=app.id,
+                config_type=AppConfigType.DRAFT,
+                version=0,
+                **{
+                    **DEFAULT_APP_CONFIG,
+                    "preset_prompt": app_config.get("preset_prompt", ""),
+                },
+            )
+            self.db.session.add(app_config_version)
+            self.db.session.flush()
+
+            app.draft_app_config_id = app_config_version.id
 
     def get_app(self, app_id: UUID, account: Account) -> App:
         """获取应用基础信息"""
