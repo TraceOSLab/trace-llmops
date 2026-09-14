@@ -1,5 +1,5 @@
 from injector import inject
-from langchain_classic.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
 from pydantic import BaseModel, Field
 from langchain_core.tools import BaseTool, tool
 from internal.core.agent.entities.agent_entity import DATASET_RETRIEVAL_TOOL_NAME
@@ -9,14 +9,14 @@ from internal.service import EmbeddingsService
 import os
 
 
-@inject
 class FaissService:
     """Faiss向量服务"""
 
     faiss: FAISS
     embeddings_service: EmbeddingsService
 
-    def _init_(self, embeddings_service: EmbeddingsService):
+    @inject
+    def __init__(self, embeddings_service: EmbeddingsService):
         """初始化Faiss"""
         self.embeddings_service = embeddings_service
 

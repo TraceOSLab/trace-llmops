@@ -23,11 +23,12 @@ from internal.entity.conversation_entity import InvokeFrom, MessageStatus
 from internal.model.account import Account
 from internal.model.conversation import Message
 from internal.schema.assistant_agent_schema import GetAssistantAgentMessagesWithPageReq
-from internal.service.base_service import BaseService
-from internal.service.conversation_service import ConversationService
 from internal.task.app_task import auto_create_app
 from pkg.paginator.paginator import Paginator
 from pkg.sqlalchemy import SQLAlchemy
+from .conversation_service import ConversationService
+from .faiss_service import FaissService
+from .base_service import BaseService
 
 
 @inject
@@ -38,6 +39,7 @@ class AssistantAgentService(BaseService):
     db: SQLAlchemy
     language_model_manager: LanguageModelManager
     conversation_service: ConversationService
+    faiss_service: FaissService
 
     def assistant_agent_chat(self, query, account_id: UUID):
         """辅助智能体对话"""
@@ -72,7 +74,7 @@ class AssistantAgentService(BaseService):
 
         # 将草稿配置中的tools转换成LangChain工具
         tools = [
-            # self.faiss_service.convert_faiss_to_tool(),
+            self.faiss_service.convert_faiss_to_tool(),
             self.convert_create_app_to_tool(account.id),
         ]
 
