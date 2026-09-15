@@ -5,6 +5,7 @@
 @Time   :   2026/1/16
 @Author :   s.qiu@foxmail.com
 """
+
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -31,33 +32,36 @@ from pkg.sqlalchemy import SQLAlchemy
 @dataclass
 class RetrievalService(BaseService):
     """检索服务"""
+
     db: SQLAlchemy
     jieba_service: JiebaService
     vector_database_service: VectorDatabaseService
 
     def search_in_datasets(
-            self,
-            dataset_ids: list[UUID],
-            query: str,
-            account_id: UUID,
-            retrieval_strategy: str = RetrievalStrategy.SEMANTIC,
-            k: int = 4,
-            score: float = 0,
-            retrival_source: str = RetrievalSource.HIT_TESTING,
+        self,
+        dataset_ids: list[UUID],
+        query: str,
+        account_id: UUID,
+        retrieval_strategy: str = RetrievalStrategy.SEMANTIC,
+        k: int = 4,
+        score: float = 0,
+        retrival_source: str = RetrievalSource.HIT_TESTING,
     ) -> list[LCDocument]:
         """知识库检索 返回检索文档+得分 全文检索则得分为0"""
 
         # 提取知识库列表校验权限
-        datasets = self.db.session.query(Dataset).filter(
-            Dataset.id.in_(dataset_ids),
-            Dataset.account_id == account_id
-        ).all()
+        datasets = (
+            self.db.session.query(Dataset)
+            .filter(Dataset.id.in_(dataset_ids), Dataset.account_id == account_id)
+            .all()
+        )
         if datasets is None or len(datasets) == 0:
             raise NotFoundException("当前无知识库可进行检索")
         dataset_ids = [datasets.id for datasets in datasets]
 
         # 构建不同种类检索器
         from internal.core.retrievers import SemanticRetriever, FullTextRetriever
+
         # 相似性/向量 检索器
         semantic_retriever = SemanticRetriever(
             dataset_ids=dataset_ids,
@@ -72,7 +76,9 @@ class RetrievalService(BaseService):
             search_kwargs={"k": k},
         )
         # 混合检索器
-        hybrid_retriever = EnsembleRetriever(retrievers=[semantic_retriever, full_text_retriever], weights=[0.5, 0.5])
+        hybrid_retriever = EnsembleRetriever(
+            retrievers=[semantic_retriever, full_text_retriever], weights=[0.5, 0.5]
+        )
 
         # 执行不同检索策略
         if retrieval_strategy == RetrievalStrategy.SEMANTIC:
@@ -83,14 +89,16 @@ class RetrievalService(BaseService):
             lc_documents = hybrid_retriever.invoke(query)[:k]
 
         # 知识库查询记录 存储唯一记录
-        unique_dataset_ids = list(set(str(lc_document.metadata["dataset_id"]) for lc_document in lc_documents))
+        unique_dataset_ids = list(
+            set(str(lc_document.metadata["dataset_id"]) for lc_document in lc_documents)
+        )
         for dataset_id in unique_dataset_ids:
             self.create(
                 DatasetQuery,
                 dataset_id=dataset_id,
                 query=query,
                 source=retrival_source,
-                # todo:等待APP配置模块完成后进行调整
+                # todo:9 等待APP配置模块完成后进行调整
                 source_app_id=None,
                 created_by=account_id,
             )
@@ -99,7 +107,14 @@ class RetrievalService(BaseService):
         with self.db.auto_commit():
             stmt = (
                 update(Segment)
-                .where(Segment.id.in_([lc_document.metadata["segment_id"] for lc_document in lc_documents]))
+                .where(
+                    Segment.id.in_(
+                        [
+                            lc_document.metadata["segment_id"]
+                            for lc_document in lc_documents
+                        ]
+                    )
+                )
                 .values(hit_count=Segment.hit_count + 1)
             )
             self.db.session.execute(stmt)
@@ -107,19 +122,20 @@ class RetrievalService(BaseService):
         return lc_documents
 
     def create_langchain_tool_from_search(
-            self,
-            flask_app: Flask,
-            dataset_ids: list[UUID],
-            account_id: UUID,
-            retrieval_strategy: str = RetrievalStrategy.SEMANTIC,
-            k: int = 4,
-            score: float = 0,
-            retrival_source: str = RetrievalSource.HIT_TESTING,
+        self,
+        flask_app: Flask,
+        dataset_ids: list[UUID],
+        account_id: UUID,
+        retrieval_strategy: str = RetrievalStrategy.SEMANTIC,
+        k: int = 4,
+        score: float = 0,
+        retrival_source: str = RetrievalSource.HIT_TESTING,
     ):
         """构建一个 LangChain知识库检索工具"""
 
         class DatasetRetrievalInput(BaseModel):
             """知识库检索工具输入结构"""
+
             query: str = Field(description="知识库搜索query语句，类型为字符串")
 
         @tool(DATASET_RETRIEVAL_TOOL_NAME, args_schema=DatasetRetrievalInput)

@@ -287,8 +287,7 @@ class AppService(BaseService):
         # 校验传递的草稿配置
         draft_app_config = self._validate_draft_app_config(draft_app_config, account)
         draft_app_config_record = app.draft_app_config
-
-        # todo: server_onupdate 字段手动传递
+        # todo:6 字段手动传递
         self.update(
             draft_app_config_record, updated_at=datetime.now(), **draft_app_config
         )
@@ -314,7 +313,7 @@ class AppService(BaseService):
             text_to_speech=draft_app_config["text_to_speech"],
             suggested_after_answer=draft_app_config["suggested_after_answer"],
             review_config=draft_app_config["review_config"],
-            # todo:等待工作流模块完成
+            # todo:5 等待工作流模块完成
             workflows=draft_app_config["workflows"],
             tools=[
                 {
@@ -747,7 +746,7 @@ class AppService(BaseService):
             # 6.11 重新赋值工具
             draft_app_config["tools"] = validate_tools
 
-        # todo:7.校验workflows，等待工作流模块完成后实现
+        # todo:7 校验workflows，等待工作流模块完成后实现
         if "workflows" in draft_app_config:
             draft_app_config["workflows"] = []
 
@@ -871,7 +870,7 @@ class AppService(BaseService):
             if (
                 set(text_to_speech.keys()) != {"enable", "voice", "auto_play"}
                 or not isinstance(text_to_speech["enable"], bool)
-                # todo:等待多模态Agent实现时添加音色
+                # todo:8 等待多模态Agent实现时添加音色
                 or text_to_speech["voice"] not in ["echo"]
                 or not isinstance(text_to_speech["auto_play"], bool)
             ):
