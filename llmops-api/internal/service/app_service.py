@@ -562,8 +562,9 @@ class AppService(BaseService):
                 user_id=account.id,
                 invoke_from=InvokeFrom.DEBUGGER,
                 enable_long_term_memory=draft_app_config["long_term_memory"]["enable"],
-                tools=tools,
+                preset_prompt=draft_app_config["preset_prompt"],
                 review_config=draft_app_config["review_config"],
+                tools=tools,
             ),
         )
 
@@ -662,7 +663,7 @@ class AppService(BaseService):
         ):
             raise ValidateErrorException("草稿配置字段出错，请核实后重试")
 
-        # 3.校验并规范化模型配置
+        # 3.校验并规范化模型配置 严格校验
         if "model_config" in draft_app_config:
             validated_model_config = self.language_model_manager.validate_model_config(
                 draft_app_config["model_config"]

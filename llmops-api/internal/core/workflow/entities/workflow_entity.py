@@ -5,6 +5,7 @@
 @Time   :   2026/3/2
 @Author :   s.qiu@foxmail.com
 """
+
 import re
 from collections import defaultdict, deque
 from typing import Annotated, Any
@@ -18,7 +19,7 @@ from .node_entity import NodeResult, BaseNodeData, NodeType
 from .variable_entity import VariableEntity, VariableValueType
 
 # 工作流配置校验信息
-WORKFLOW_CONFIG_NAME_PATTERN = r'^[A-Za-z_][A-Za-z0-9_]*$'
+WORKFLOW_CONFIG_NAME_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]*$"
 WORKFLOW_CONFIG_DESCRIPTION_MAX_LENGTH = 1024
 
 
@@ -29,7 +30,9 @@ def _process_dict(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]
     return {**left, **right}
 
 
-def _process_node_results(left: list[NodeResult], right: list[NodeResult]) -> list[NodeResult]:
+def _process_node_results(
+    left: list[NodeResult], right: list[NodeResult]
+) -> list[NodeResult]:
     """工作流状态节点结果 归纳函数"""
     left = left or []
     right = right or []
@@ -38,6 +41,7 @@ def _process_node_results(left: list[NodeResult], right: list[NodeResult]) -> li
 
 class WorkflowConfig(BaseModel):
     """工作流配置信息"""
+
     account_id: UUID
     name: str = ""  # 工作流名称
     description: str = ""  # 工作流描述
@@ -51,7 +55,9 @@ class WorkflowConfig(BaseModel):
         # 校验工作流名称是否符合规则
         name = values.get("name", None)
         if not name or not re.match(WORKFLOW_CONFIG_NAME_PATTERN, name):
-            raise ValidateErrorException("工作流名称仅支持字母、数字、下划线，且以字母、下划线为开头")
+            raise ValidateErrorException(
+                "工作流名称仅支持字母、数字、下划线，且以字母、下划线为开头"
+            )
 
         # 校验工作流描述信息 文本需要传递到LLM 有长度显示
         description = values.get("description", None)
@@ -79,6 +85,7 @@ class WorkflowConfig(BaseModel):
             TemplateTransformNodeData,
             ToolNodeData,
         )
+
         node_data_classes = {
             NodeType.CODE: CodeNodeData,
             NodeType.DATASET_RETRIEVAL: DatasetRetrievalNodeData,
@@ -121,7 +128,10 @@ class WorkflowConfig(BaseModel):
             if node_data.id in node_data_dict:
                 raise ValidateErrorException("每个节点的id必须唯一")
 
-            if any(item.title.strip() == node_data.title.strip() for item in node_data_dict.values()):
+            if any(
+                item.title.strip() == node_data.title.strip()
+                for item in node_data_dict.values()
+            ):
                 raise ValidateErrorException("每个节点的title必须唯一")
 
             # 添加数据到字典
@@ -141,15 +151,19 @@ class WorkflowConfig(BaseModel):
 
             # 17.校验边的 source/target/source_type/target_type 是否在节点中存在
             if (
-                    edge_data.source not in node_data_dict
-                    or edge_data.source_type != node_data_dict[edge_data.source].node_type
-                    or edge_data.target not in node_data_dict
-                    or edge_data.target_type != node_data_dict[edge_data.target].node_type
+                edge_data.source not in node_data_dict
+                or edge_data.source_type != node_data_dict[edge_data.source].node_type
+                or edge_data.target not in node_data_dict
+                or edge_data.target_type != node_data_dict[edge_data.target].node_type
             ):
-                raise ValidateErrorException("工作流边起点/终点对应的节点不存在或类型错误")
+                raise ValidateErrorException(
+                    "工作流边起点/终点对应的节点不存在或类型错误"
+                )
 
-            if any((item.source == edge_data.source and item.target == edge_data.target) for item in
-                   edge_data_dict.values()):
+            if any(
+                (item.source == edge_data.source and item.target == edge_data.target)
+                for item in edge_data_dict.values()
+            ):
                 raise ValidateErrorException("工作流边数据不能重复")
 
             # 添加数据到字典
@@ -162,13 +176,21 @@ class WorkflowConfig(BaseModel):
 
         # 从边的关系中校验是否有唯一的开始/结束节点
         # 入度为0就是开始节点 出度为0就是结束节点
-        start_nodes = [node_data for node_data in node_data_dict.values() if in_degree[node_data.id] == 0]
-        end_nodes = [node_data for node_data in node_data_dict.values() if out_degree[node_data.id] == 0]
+        start_nodes = [
+            node_data
+            for node_data in node_data_dict.values()
+            if in_degree[node_data.id] == 0
+        ]
+        end_nodes = [
+            node_data
+            for node_data in node_data_dict.values()
+            if out_degree[node_data.id] == 0
+        ]
         if (
-                len(start_nodes) != 1
-                or len(end_nodes) != 1
-                or start_nodes[0].node_type != NodeType.START
-                or end_nodes[0].node_type != NodeType.END
+            len(start_nodes) != 1
+            or len(end_nodes) != 1
+            or start_nodes[0].node_type != NodeType.START
+            or end_nodes[0].node_type != NodeType.END
         ):
             raise ValidateErrorException("工作流中有且只有一个开始/结束节点")
 
@@ -190,13 +212,19 @@ class WorkflowConfig(BaseModel):
         return values
 
     @classmethod
-    def _is_cycle(cls, nodes: list[BaseNodeData], adj_list: defaultdict[Any, list],
-                  in_degree: defaultdict[Any, list]) -> bool:
+    def _is_cycle(
+        cls,
+        nodes: list[BaseNodeData],
+        adj_list: defaultdict[Any, list],
+        in_degree: defaultdict[Any, list],
+    ) -> bool:
         """拓扑排序 Kahn算法 检测图中是否存在环路:
         Kahn 算法的核心为：如果存在环，那么至少有一个非结束节点的入度大于等于2，并且该入度无法消减到0，
         这就会导致该节点后续的所有子节点在该算法下都无法浏览 那么访问次数肯定 小于总节点数"""
         # 存储所有入度为0的开始节点
-        zero_in_degree_nodes = deque([node.id for node in nodes if in_degree[node.id] == 0])
+        zero_in_degree_nodes = deque(
+            [node.id for node in nodes if in_degree[node.id] == 0]
+        )
         # 记录已经访问的节点数量
         visited_count = 0
         # 遍历入度为0的节点信息
@@ -232,9 +260,9 @@ class WorkflowConfig(BaseModel):
 
     @classmethod
     def _validate_inputs_ref(
-            cls,
-            node_data_dict: dict[UUID, BaseNodeData],
-            reverse_adj_list: defaultdict[Any, list],
+        cls,
+        node_data_dict: dict[UUID, BaseNodeData],
+        reverse_adj_list: defaultdict[Any, list],
     ) -> None:
         """校入数据引用是否正确"""
         # 循环遍历所有节点数据逐个处理
@@ -246,7 +274,8 @@ class WorkflowConfig(BaseModel):
             if node_data.node_type != NodeType.START:
                 # 根据节点类型从inputs或者是outputs中提取需要校验的数据
                 variables: list[VariableEntity] = (
-                    node_data.inputs if node_data.node_type != NodeType.END
+                    node_data.inputs
+                    if node_data.node_type != NodeType.END
                     else node_data.outputs
                 )
 
@@ -255,24 +284,34 @@ class WorkflowConfig(BaseModel):
                     # 如果变量类型为引用，则需要校验
                     if variable.value.type == VariableValueType.REF:
                         # 判断前置节点是否为空，或者引用id不在前置节点内，则直接抛出错误
-                        if (len(predecessors) <= 0
-                                or variable.value.content.ref_node_id not in predecessors):
-                            raise ValidateErrorException(f"工作流节点[{node_data.title}]引用数据出错")
+                        if (
+                            len(predecessors) <= 0
+                            or variable.value.content.ref_node_id not in predecessors
+                        ):
+                            raise ValidateErrorException(
+                                f"工作流节点[{node_data.title}]引用数据出错"
+                            )
 
                         # 提取数据引用的前置节点数据
-                        ref_node_data = node_data_dict.get(variable.value.content.ref_node_id)
+                        ref_node_data = node_data_dict.get(
+                            variable.value.content.ref_node_id
+                        )
 
                         # 获取引用变量列表，如果是开始节点则从inputs中获取数据，否则从outputs中获取数据
                         ref_variables = (
-                            ref_node_data.inputs if ref_node_data.node_type == NodeType.START
+                            ref_node_data.inputs
+                            if ref_node_data.node_type == NodeType.START
                             else ref_node_data.outputs
                         )
 
                         # 判断引用变量列表中是否存在该引用名字
-                        if not any([ref_variable.name == variable.value.content.ref_var_name] for ref_variable in
-                                   ref_variables):
+                        if not any(
+                            ref_variable.name == variable.value.content.ref_var_name
+                            for ref_variable in ref_variables
+                        ):
                             raise ValidateErrorException(
-                                f"工作流节点[{node_data.title}]引用了不存在的节点变量")
+                                f"工作流节点[{node_data.title}]引用了不存在的节点变量"
+                            )
 
     @classmethod
     def _build_adj_list(cls, edges: list[BaseEdgeData]) -> defaultdict[Any, list]:
@@ -283,7 +322,9 @@ class WorkflowConfig(BaseModel):
         return adj_list
 
     @classmethod
-    def _build_reverse_adj_list(cls, edges: list[BaseEdgeData]) -> defaultdict[Any, list]:
+    def _build_reverse_adj_list(
+        cls, edges: list[BaseEdgeData]
+    ) -> defaultdict[Any, list]:
         """构建逆邻接表 节点ID：节点直接父节点"""
         reverse_adj_list = defaultdict(list)
         for edge in edges:
@@ -291,7 +332,9 @@ class WorkflowConfig(BaseModel):
         return reverse_adj_list
 
     @classmethod
-    def _build_degrees(cls, edges: list[BaseEdgeData]) -> tuple[defaultdict[Any, int], defaultdict[Any, int]]:
+    def _build_degrees(
+        cls, edges: list[BaseEdgeData]
+    ) -> tuple[defaultdict[Any, int], defaultdict[Any, int]]:
         """计算每个节点的 in_degress&out_degrees 入度和出度"""
         in_degree = defaultdict(int)
         out_degree = defaultdict(int)
@@ -301,7 +344,9 @@ class WorkflowConfig(BaseModel):
         return in_degree, out_degree
 
     @classmethod
-    def _get_predecessors(cls, reverse_adj_list: defaultdict[Any, list], target_node_id: UUID) -> list[UUID]:
+    def _get_predecessors(
+        cls, reverse_adj_list: defaultdict[Any, list], target_node_id: UUID
+    ) -> list[UUID]:
         """获取某个几点的所有前置节点 根据逆邻接表&目标节点"""
         visited = set()
         predecessors = []
@@ -320,6 +365,9 @@ class WorkflowConfig(BaseModel):
 
 class WorkflowState(BaseModel):
     """工作流程序状态"""
+
     inputs: Annotated[dict[str, Any], _process_dict]  # 工作流状态输入
     outputs: Annotated[dict[str, Any], _process_dict]  # 工作流状态输出
-    node_results: Annotated[list[NodeResult], _process_node_results]  # 各节点点的运行结果
+    node_results: Annotated[
+        list[NodeResult], _process_node_results
+    ]  # 各节点点的运行结果

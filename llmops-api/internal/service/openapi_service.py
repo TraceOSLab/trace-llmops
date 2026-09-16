@@ -140,8 +140,9 @@ class OpenApiService(BaseService):
                 user_id=account.id,
                 invoke_from=InvokeFrom.DEBUGGER,
                 enable_long_term_memory=app_config["long_term_memory"]["enable"],
-                tools=tools,
+                preset_prompt=app_config["preset_prompt"],
                 review_config=app_config["review_config"],
+                tools=tools,
             ),
         )
 

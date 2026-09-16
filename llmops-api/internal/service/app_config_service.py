@@ -47,6 +47,13 @@ class AppConfigService(BaseService):
         """获取该应用的运行配置"""
         app_config = app.app_config
 
+        # 校验 model_config 配置, 如果使用不存在的模型，使用默认值填充 宽松校验
+        validate_model_config = self._process_and_validate_model_config(
+            app_config.model_config
+        )
+        if app_config.model_config != validate_model_config:
+            self.update(app_config, model_config=validate_model_config)
+
         # 校验工具列表 是否需要更新草稿配置中的工具配置
         tools, validate_tools = self._process_and_validate_tools(app_config.tools)
         if app_config.tools != validate_tools:
@@ -80,10 +87,12 @@ class AppConfigService(BaseService):
 
         draft_app_config = app.draft_app_config
 
-        # 校验 model_config 配置, 如果使用不存在的模型，使用默认值填充
-        validate_model_config = self._process_and_validate_model_config(draft_app_config.model_config)
+        # 校验 model_config 配置, 如果使用不存在的模型，使用默认值填充 宽松校验
+        validate_model_config = self._process_and_validate_model_config(
+            draft_app_config.model_config
+        )
         if draft_app_config.model_config != validate_model_config:
-          self.update(draft_app_config, model_config=validate_model_config)
+            self.update(draft_app_config, model_config=validate_model_config)
 
         # 校验工具列表 是否需要更新草稿配置中的工具配置
         tools, validate_tools = self._process_and_validate_tools(draft_app_config.tools)

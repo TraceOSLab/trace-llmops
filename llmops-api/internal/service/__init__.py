@@ -34,6 +34,7 @@ from .vector_database_service import VectorDatabaseService
 from .workflow_service import WorkflowService
 from .assistant_agent_service import AssistantAgentService
 from .faiss_service import FaissService
+from .language_model_service import LanguageModelService
 
 __all__ = [
     "JWTService",
@@ -63,5 +64,6 @@ __all__ = [
     "OpenApiService",
     "WorkflowService",
     "AssistantAgentService",
+    "LanguageModelService",
     "FaissService",
 ]
