@@ -62,7 +62,9 @@ class AssistantAgentService(BaseService):
         )
 
         # 使用系统默认模型作为LLM
-        llm = self.language_model_manager.create_system_chat_model({"temperature": 0.7})
+        llm = self.language_model_manager.create_default_language_model(
+            {"temperature": 0.7}
+        )
 
         # 提取记忆
         token_buffer_memory = TokenBufferMemory(

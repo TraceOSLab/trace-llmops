@@ -43,7 +43,9 @@ class ConversationService(BaseService):
     ) -> str:
         """根据消息和旧的摘要生成 新摘要"""
         prompt = ChatPromptTemplate.from_template(SUMMARIZER_TEMPLATE)
-        llm = self.language_model_manager.create_system_chat_model({"temperature": 0.5})
+        llm = self.language_model_manager.create_default_language_model(
+            {"temperature": 0.5}
+        )
         # 构建链应用
         chain = prompt | llm | StrOutputParser()
         new_summary = chain.invoke(
@@ -66,7 +68,7 @@ class ConversationService(BaseService):
             prompt = ChatPromptTemplate.from_messages(
                 [("system", CONVERSATION_NAME_TEMPLATE), ("human", "{query}")]
             )
-            llm = self.language_model_manager.create_system_chat_model(
+            llm = self.language_model_manager.create_default_language_model(
                 {"temperature": 0}
             )
             chain = prompt | llm | StrOutputParser()
@@ -99,6 +101,7 @@ class ConversationService(BaseService):
                 ("human", "{histories}"),
             ]
         ).partial(format_instructions=parser.get_format_instructions())
+
         try:
             structured_llm = (
                 self.language_model_manager.create_system_structured_chat_model(
@@ -107,9 +110,11 @@ class ConversationService(BaseService):
                     max_attempts=2,
                 )
             )
+
             chain = prompt | structured_llm
             suggested_questions = chain.invoke({"histories": histories})
             questions = suggested_questions.questions
+
         except Exception:
             logging.exception("生成建议问题失败，已回退为空列表")
             return []

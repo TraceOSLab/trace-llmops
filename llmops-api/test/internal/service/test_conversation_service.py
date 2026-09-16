@@ -25,7 +25,7 @@ def create_service(*responses: str | Exception) -> ConversationService:
 
         return RunnableLambda(invoke)
 
-    manager.create_system_chat_model.side_effect = create_model
+    manager.create_default_language_model.side_effect = create_model
 
     def create_structured_model(schema, _parameters, max_attempts=2):
         del max_attempts
@@ -38,9 +38,7 @@ def create_service(*responses: str | Exception) -> ConversationService:
 
         return RunnableLambda(invoke)
 
-    manager.create_system_structured_chat_model.side_effect = (
-        create_structured_model
-    )
+    manager.create_system_structured_chat_model.side_effect = create_structured_model
     return ConversationService(db=MagicMock(), language_model_manager=manager)
 
 

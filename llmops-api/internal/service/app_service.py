@@ -119,7 +119,9 @@ class AppService(BaseService):
     def auto_create_app(self, name: str, description: str, account_id: UUID) -> None:
         """利用AI自动创建一个AGENT"""
         #  系统默认LLM辅助模型
-        llm = self.language_model_manager.create_system_chat_model({"temperature": 0.8})
+        llm = self.language_model_manager.create_default_language_model(
+            {"temperature": 0.8}
+        )
 
         # 构建生成 icon 链
         dalle_api_wrapper = DallEAPIWrapper(model="dall-e-3", size="1024x1024")
@@ -522,7 +524,7 @@ class AppService(BaseService):
         )
 
         # 根据配置实例化模型
-        llm = self.language_model_manager.create_chat_model(
+        llm = self.language_model_manager.create_language_model(
             draft_app_config["model_config"]
         )
 

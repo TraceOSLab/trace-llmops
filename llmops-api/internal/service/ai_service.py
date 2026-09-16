@@ -5,6 +5,7 @@
 @Time   :   2026/2/25 09:47
 @Author :   s.qiu@foxmail.com
 """
+
 import json
 from dataclasses import dataclass
 from typing import Generator
@@ -27,17 +28,17 @@ from .conversation_service import ConversationService
 @dataclass
 class AIService(BaseService):
     """AI辅助服务"""
+
     db: SQLAlchemy
     conversation_service: ConversationService
     language_model_manager: LanguageModelManager
 
     def optimize_prompt(self, prompt: str) -> Generator[str, None, None]:
         """根据传递的预设prompt进行优化"""
-        prompt_template = ChatPromptTemplate.from_messages([
-            ("system", OPTIMIZE_PROMPT_TEMPLATE),
-            ("human", "{prompt}")
-        ])
-        llm = self.language_model_manager.create_system_chat_model(
+        prompt_template = ChatPromptTemplate.from_messages(
+            [("system", OPTIMIZE_PROMPT_TEMPLATE), ("human", "{prompt}")]
+        )
+        llm = self.language_model_manager.create_default_language_model(
             {"temperature": 0.5}
         )
         chain = prompt_template | llm | StrOutputParser()
@@ -47,7 +48,9 @@ class AIService(BaseService):
             data = {"optimize_prompt": chunk}
             yield f"event: optimize_prompt\ndata: {json.dumps(data)}\n\n"
 
-    def generate_suggested_questions_from_message_id(self, message_id: UUID, account: Account) -> list[str]:
+    def generate_suggested_questions_from_message_id(
+        self, message_id: UUID, account: Account
+    ) -> list[str]:
         """根据传递的消息id+账号生成建议问题列表"""
         message = self.get(Message, message_id)
         if not message or message.created_by != account.id:

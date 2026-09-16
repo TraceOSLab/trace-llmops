@@ -13,6 +13,7 @@ from typing import Any
 
 from flask import current_app
 from injector import inject
+from langchain_core.language_models import BaseLanguageModel
 
 from internal.core.language_model import LanguageModelManager
 from internal.exception.exception import NotFoundException
@@ -113,3 +114,31 @@ class LanguageModelService(BaseService):
         with open(icon_path, "rb") as f:
             byte_data = f.read()
             return byte_data, mimetype
+
+    def load_language_model(self, model_config: dict[str, Any]) -> dict[str, Any]:
+        """根据传递的模型配置加载模型实例"""
+        try:
+            # 提取 provider、model、parameters
+            provider_name = model_config.get("provider", "")
+            model_name = model_config.get("model", "")
+            parameters = model_config.get("parameters", {})
+
+            # 从模型管理器获取提供者、模型实体、模型类
+            provider = self.language_model_manager.get_provider(provider_name)
+            model_entity = provider.get_model_entity(model_name)
+            model_class = provider.get_model_class(model_entity.model_type)
+
+            # 实例化模型并返回
+            return model_class(
+                **model_entity.attributes,
+                **parameters,
+                features=model_entity.features,
+                metadata=model_entity.metadata,
+            )
+        except Exception as _:
+            return self.load_default_language_model()
+
+    @classmethod
+    def load_default_language_model(cls) -> BaseLanguageModel:
+        """加载默认模型 匹配不到时使用默认模型进行兜底"""
+        return cls.language_model_manager.create_default_language_model()

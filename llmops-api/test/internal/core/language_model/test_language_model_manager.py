@@ -7,7 +7,6 @@ from internal.core.language_model import LanguageModelManager
 from internal.entity.conversation_entity import SuggestedQuestions
 from internal.exception import ValidateErrorException
 
-
 VISIBLE_MODELS = {
     "openai": ["gpt-4o", "gpt-4o-mini"],
     "deepseek": ["deepseek-v4-flash", "deepseek-v4-pro"],
@@ -56,21 +55,18 @@ def test_visible_provider_catalog_and_hidden_compatibility(manager):
 
     assert manager.get_provider("tongyi").provider_entity.visible is False
     assert manager.get_provider("wenxin").provider_entity.visible is False
-    legacy_model = manager.get_provider("moonshot").get_model_entity(
-        "moonshot-v1-8k"
-    )
+    legacy_model = manager.get_provider("moonshot").get_model_entity("moonshot-v1-8k")
     assert legacy_model.visible is False
 
 
 def test_visible_provider_icons_exist(manager):
-    providers_path = Path(__file__).parents[4] / "internal/core/language_model/providers"
+    providers_path = (
+        Path(__file__).parents[4] / "internal/core/language_model/providers"
+    )
 
     for provider in manager.get_visible_providers():
         icon_path = (
-            providers_path
-            / provider.name
-            / "_asset"
-            / provider.provider_entity.icon
+            providers_path / provider.name / "_asset" / provider.provider_entity.icon
         )
         assert icon_path.is_file(), f"missing icon for {provider.name}"
 
@@ -82,7 +78,7 @@ def test_factory_builds_provider_model_without_network(monkeypatch, manager, pro
     model_name = VISIBLE_MODELS[provider][0]
     temperature = 1 if provider == "moonshot" else 0.5
 
-    llm = manager.create_chat_model(
+    llm = manager.create_language_model(
         {
             "provider": provider,
             "model": model_name,
@@ -103,7 +99,7 @@ def test_factory_builds_provider_model_without_network(monkeypatch, manager, pro
 
 
 def test_ollama_maps_max_tokens_to_num_predict(manager):
-    llm = manager.create_chat_model(
+    llm = manager.create_language_model(
         {
             "provider": "ollama",
             "model": "qwen2.5-7b",
@@ -127,13 +123,11 @@ def test_factory_uses_provider_base_url(
     monkeypatch, manager, provider, expected_base_url
 ):
     monkeypatch.setenv(PROVIDER_ENV[provider], "test-key")
-    llm = manager.create_chat_model(
+    llm = manager.create_language_model(
         {"provider": provider, "model": VISIBLE_MODELS[provider][0]}
     )
 
-    base_url = getattr(llm, "openai_api_base", None) or getattr(
-        llm, "api_base", None
-    )
+    base_url = getattr(llm, "openai_api_base", None) or getattr(llm, "api_base", None)
     assert base_url == expected_base_url
 
 
@@ -141,9 +135,7 @@ def test_openai_base_url_can_be_overridden_by_environment(monkeypatch, manager):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("OPENAI_API_BASE", "https://openai-proxy.example/v1")
 
-    llm = manager.create_chat_model(
-        {"provider": "openai", "model": "gpt-4o-mini"}
-    )
+    llm = manager.create_language_model({"provider": "openai", "model": "gpt-4o-mini"})
 
     assert llm.openai_api_base == "https://openai-proxy.example/v1"
 
@@ -152,7 +144,7 @@ def test_factory_requires_provider_credential(monkeypatch, manager):
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
 
     with pytest.raises(ValidateErrorException) as error:
-        manager.create_chat_model(
+        manager.create_language_model(
             {"provider": "deepseek", "model": "deepseek-v4-flash"}
         )
 
@@ -215,7 +207,7 @@ def test_system_model_uses_environment_selection(monkeypatch, manager):
     monkeypatch.setenv("SYSTEM_LLM_MODEL", "glm-5.2")
     monkeypatch.setenv("ZHIPU_API_KEY", "test-key")
 
-    llm = manager.create_system_chat_model({"temperature": 0})
+    llm = manager.create_default_language_model({"temperature": 0})
 
     assert llm.model_name == "glm-5.2"
     assert llm.temperature == 0
@@ -254,13 +246,11 @@ def test_structured_factory_applies_declared_strategy(
     class FakeChatModel:
         def with_structured_output(self, schema, **kwargs):
             captured.update(schema=schema, kwargs=kwargs)
-            return RunnableLambda(
-                lambda _input: SuggestedQuestions(questions=[])
-            )
+            return RunnableLambda(lambda _input: SuggestedQuestions(questions=[]))
 
     monkeypatch.setattr(
         LanguageModelManager,
-        "create_chat_model",
+        "create_language_model",
         lambda _self, _config: FakeChatModel(),
     )
 
@@ -281,9 +271,7 @@ def test_structured_factory_applies_declared_strategy(
         assert "strict" not in captured["kwargs"]
 
 
-def test_structured_factory_retries_schema_validation_once(
-    monkeypatch, manager
-):
+def test_structured_factory_retries_schema_validation_once(monkeypatch, manager):
     attempts = 0
 
     class FakeChatModel:
@@ -299,7 +287,7 @@ def test_structured_factory_retries_schema_validation_once(
 
     monkeypatch.setattr(
         LanguageModelManager,
-        "create_chat_model",
+        "create_language_model",
         lambda _self, _config: FakeChatModel(),
     )
 

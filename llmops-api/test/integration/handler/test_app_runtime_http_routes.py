@@ -9,7 +9,6 @@ from internal.entity.app_entity import DEFAULT_APP_CONFIG
 from test.integration.conftest import assert_success
 from test.integration.handler.test_database_http_routes import APP_PAYLOAD
 
-
 pytestmark = pytest.mark.integration
 
 
@@ -21,9 +20,7 @@ def app_record(client, db_session):
     return db_session.get(App, UUID(created["data"]["id"]))
 
 
-def test_app_config_publish_history_and_fallback_routes(
-    client, db_session, app_record
-):
+def test_app_config_publish_history_and_fallback_routes(client, db_session, app_record):
     from internal.model import App, AppConfigVersion
 
     draft = assert_success(client.get(f"/apps/{app_record.id}/draft-app-config"))
@@ -32,11 +29,12 @@ def test_app_config_publish_history_and_fallback_routes(
     config = deepcopy(DEFAULT_APP_CONFIG)
     config["preset_prompt"] = "integration prompt"
     config["long_term_memory"] = {"enable": True}
-    assert_success(
-        client.post(f"/apps/{app_record.id}/draft-app-config", json=config)
-    )
+    assert_success(client.post(f"/apps/{app_record.id}/draft-app-config", json=config))
     db_session.expire_all()
-    assert db_session.get(App, app_record.id).draft_app_config.preset_prompt == "integration prompt"
+    assert (
+        db_session.get(App, app_record.id).draft_app_config.preset_prompt
+        == "integration prompt"
+    )
 
     assert_success(client.post(f"/apps/{app_record.id}/publish"))
     db_session.expire_all()
@@ -47,9 +45,7 @@ def test_app_config_publish_history_and_fallback_routes(
     history_id = histories["data"]["list"][0]["id"]
 
     config["preset_prompt"] = "changed prompt"
-    assert_success(
-        client.post(f"/apps/{app_record.id}/draft-app-config", json=config)
-    )
+    assert_success(client.post(f"/apps/{app_record.id}/draft-app-config", json=config))
     assert_success(
         client.post(
             f"/apps/{app_record.id}/fallback-history",
@@ -57,7 +53,10 @@ def test_app_config_publish_history_and_fallback_routes(
         )
     )
     db_session.expire_all()
-    assert db_session.get(App, app_record.id).draft_app_config.preset_prompt == "integration prompt"
+    assert (
+        db_session.get(App, app_record.id).draft_app_config.preset_prompt
+        == "integration prompt"
+    )
 
     assert_success(client.post(f"/apps/{app_record.id}/cancel-publish"))
     db_session.expire_all()
@@ -69,9 +68,7 @@ def test_app_debug_conversation_routes(client, db_session, app_record):
 
     config = deepcopy(DEFAULT_APP_CONFIG)
     config["long_term_memory"] = {"enable": True}
-    assert_success(
-        client.post(f"/apps/{app_record.id}/draft-app-config", json=config)
-    )
+    assert_success(client.post(f"/apps/{app_record.id}/draft-app-config", json=config))
 
     summary = assert_success(client.get(f"/apps/{app_record.id}/summary"))
     assert summary["data"]["summary"] == ""
@@ -89,9 +86,7 @@ def test_app_debug_conversation_routes(client, db_session, app_record):
     assert messages["data"]["list"] == []
 
     assert_success(
-        client.post(
-            f"/apps/{app_record.id}/conversations/delete-debug-conversation"
-        )
+        client.post(f"/apps/{app_record.id}/conversations/delete-debug-conversation")
     )
     db_session.expire_all()
     assert db_session.get(App, app_record.id).debug_conversation_id is None
@@ -139,7 +134,9 @@ def test_app_debug_stream_stop_and_ping_routes(
     fake_llm = MagicMock(features=[], metadata={})
     fake_llm.invoke.return_value.content = "ok"
     app_handler.language_model_manager = MagicMock()
-    app_handler.language_model_manager.create_system_chat_model.return_value = fake_llm
+    app_handler.language_model_manager.create_default_language_model.return_value = (
+        fake_llm
+    )
 
     debug_response = client.post(
         f"/apps/{app_record.id}/debug", json={"query": "hello"}

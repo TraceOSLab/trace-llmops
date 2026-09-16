@@ -7,7 +7,6 @@ from langchain_core.tools import tool
 
 from internal.core.language_model import LanguageModelManager
 
-
 pytestmark = pytest.mark.skipif(
     os.getenv("RUN_LLM_SMOKE_TESTS", "").lower() != "true",
     reason="set RUN_LLM_SMOKE_TESTS=true to call paid provider APIs",
@@ -31,7 +30,7 @@ def add(left: int, right: int) -> int:
     ],
 )
 def test_provider_text_and_tool_call(provider, model):
-    llm = LanguageModelManager().create_chat_model(
+    llm = LanguageModelManager().create_language_model(
         {
             "provider": provider,
             "model": model,

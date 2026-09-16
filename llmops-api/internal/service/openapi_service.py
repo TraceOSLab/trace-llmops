@@ -39,6 +39,7 @@ from .retrieval_service import RetrievalService
 @dataclass
 class OpenApiService(BaseService):
     """开放API服务"""
+
     db: SQLAlchemy
     app_service: AppService
     app_config_service: AppConfigService
@@ -60,70 +61,89 @@ class OpenApiService(BaseService):
             if not end_user or end_user.app_id != app.id:
                 raise ForbiddenException("当前账号不存在或未关联当前应用！")
         else:
-            end_user = self.create(EndUser, **{"tenant_id": account.id, "app_id": app.id})
+            end_user = self.create(
+                EndUser, **{"tenant_id": account.id, "app_id": app.id}
+            )
 
         # 是否传递了会话ID 传递了需要检测会话归属信息 否则需要创建会话
         if req.conversation_id.data:
             conversation = self.get(Conversation, req.conversation_id.data)
             if (
-                    not conversation
-                    or conversation.app_id != app.id
-                    or conversation.invoke_from != InvokeFrom.SERVICE_API
-                    or conversation.created_by != end_user.id
+                not conversation
+                or conversation.app_id != app.id
+                or conversation.invoke_from != InvokeFrom.SERVICE_API
+                or conversation.created_by != end_user.id
             ):
                 raise ForbiddenException("会话不存在或不属于该用户/应用/调用方式")
         else:
-            conversation = self.create(Conversation, **{
-                "app_id": app.id,
-                "name": "New Conversation",
-                "invoke_from": InvokeFrom.SERVICE_API,
-                "created_by": end_user.id,
-            })
+            conversation = self.create(
+                Conversation,
+                **{
+                    "app_id": app.id,
+                    "name": "New Conversation",
+                    "invoke_from": InvokeFrom.SERVICE_API,
+                    "created_by": end_user.id,
+                },
+            )
 
         # 获取当前应用的运行配置
         app_config = self.app_config_service.get_app_config(app)
 
         # 根据用户查询创建消息记录
-        message = self.create(Message, **{
-            "app_id": app.id,
-            "conversation_id": conversation.id,
-            "invoke_from": InvokeFrom.SERVICE_API,
-            "created_by": end_user.id,
-            "query": req.query.data,
-            "status": MessageStatus.NORMAL
-        })
+        message = self.create(
+            Message,
+            **{
+                "app_id": app.id,
+                "conversation_id": conversation.id,
+                "invoke_from": InvokeFrom.SERVICE_API,
+                "created_by": end_user.id,
+                "query": req.query.data,
+                "status": MessageStatus.NORMAL,
+            },
+        )
 
         # 根据应用配置创建对应 Provider 的模型
-        llm = self.language_model_manager.create_chat_model(
+        llm = self.language_model_manager.create_language_model(
             app_config["model_config"]
         )
 
         # 提取短期记忆
-        token_buffer_memory = TokenBufferMemory(db=self.db, conversation=conversation, model_instance=llm)
-        history = token_buffer_memory.get_history_prompt_messages(message_limit=app_config["dialog_round"])
+        token_buffer_memory = TokenBufferMemory(
+            db=self.db, conversation=conversation, model_instance=llm
+        )
+        history = token_buffer_memory.get_history_prompt_messages(
+            message_limit=app_config["dialog_round"]
+        )
 
         # 该应用配置的工具转换为 langchain 工具
-        tools = self.app_config_service.get_langchain_tools_by_tools_config(app_config["tools"])
+        tools = self.app_config_service.get_langchain_tools_by_tools_config(
+            app_config["tools"]
+        )
 
         # 是否关联知识库 构建知识库检索 langchain 工具
         if app_config["datasets"]:
-            dataset_retrieval = self.retrieval_service.create_langchain_tool_from_search(
-                flask_app=current_app._get_current_object(),
-                dataset_ids=[dataset["id"] for dataset in app_config["datasets"]],
-                account_id=account.id,
-                retrival_source=RetrievalSource.APP,
-                **app_config["retrieval_config"],
+            dataset_retrieval = (
+                self.retrieval_service.create_langchain_tool_from_search(
+                    flask_app=current_app._get_current_object(),
+                    dataset_ids=[dataset["id"] for dataset in app_config["datasets"]],
+                    account_id=account.id,
+                    retrival_source=RetrievalSource.APP,
+                    **app_config["retrieval_config"],
+                )
             )
             tools.append(dataset_retrieval)
 
         # 构建智能体
-        agent = FunctionCallAgent(llm=llm, agent_config=AgentConfig(
-            user_id=account.id,
-            invoke_from=InvokeFrom.DEBUGGER,
-            enable_long_term_memory=app_config["long_term_memory"]["enable"],
-            tools=tools,
-            review_config=app_config["review_config"],
-        ))
+        agent = FunctionCallAgent(
+            llm=llm,
+            agent_config=AgentConfig(
+                user_id=account.id,
+                invoke_from=InvokeFrom.DEBUGGER,
+                enable_long_term_memory=app_config["long_term_memory"]["enable"],
+                tools=tools,
+                review_config=app_config["review_config"],
+            ),
+        )
 
         agent_state = {
             "messages": [HumanMessage(req.query.data)],
@@ -137,11 +157,12 @@ class OpenApiService(BaseService):
             agent_thoughts = {}
 
             def handle_stream(
-                    end_user_id: str,
-                    conversation_id: str,
-                    message_id: str,
-                    account_id: str,
-                    app_id: str) -> Generator:
+                end_user_id: str,
+                conversation_id: str,
+                message_id: str,
+                account_id: str,
+                app_id: str,
+            ) -> Generator:
                 """函数返回 yield 作为生成器"""
 
                 for agent_thought in agent.stream(agent_state):
@@ -152,17 +173,31 @@ class OpenApiService(BaseService):
                             if event_id not in agent_thoughts:
                                 agent_thoughts[event_id] = agent_thought
                             else:
-                                agent_thoughts[event_id] = agent_thoughts[event_id].model_copy(update={
-                                    "thought": agent_thoughts[event_id].thought + agent_thought.thought,
-                                    "answer": agent_thoughts[event_id].answer + agent_thought.answer,
-                                    "latency": agent_thought.latency,
-                                })
+                                agent_thoughts[event_id] = agent_thoughts[
+                                    event_id
+                                ].model_copy(
+                                    update={
+                                        "thought": agent_thoughts[event_id].thought
+                                        + agent_thought.thought,
+                                        "answer": agent_thoughts[event_id].answer
+                                        + agent_thought.answer,
+                                        "latency": agent_thought.latency,
+                                    }
+                                )
                         else:
                             agent_thoughts[event_id] = agent_thought
                     data = {
-                        **agent_thought.model_dump(include={
-                            "event", "thought", "observation", "tool", "tool_input", "answer", "latency",
-                        }),
+                        **agent_thought.model_dump(
+                            include={
+                                "event",
+                                "thought",
+                                "observation",
+                                "tool",
+                                "tool_input",
+                                "answer",
+                                "latency",
+                            }
+                        ),
                         "id": event_id,
                         "end_user_id": end_user_id,
                         "conversation_id": conversation_id,
@@ -172,15 +207,20 @@ class OpenApiService(BaseService):
                     yield f"event: {agent_thought.event}\ndata: {json.dumps(data)}\n\n"
 
                 # 将消息以及推理过程添加到数据库记录
-                thread = Thread(target=self.conversation_service.save_agent_thoughts, kwargs={
-                    "flask_app": current_app._get_current_object(),
-                    "account_id": account_id,
-                    "app_id": app_id,
-                    "app_config": app_config,
-                    "conversation_id": conversation_id,
-                    "message_id": message_id,
-                    "agent_thoughts": [agent_thought for agent_thought in agent_thoughts.values()],
-                })
+                thread = Thread(
+                    target=self.conversation_service.save_agent_thoughts,
+                    kwargs={
+                        "flask_app": current_app._get_current_object(),
+                        "account_id": account_id,
+                        "app_id": app_id,
+                        "app_config": app_config,
+                        "conversation_id": conversation_id,
+                        "message_id": message_id,
+                        "agent_thoughts": [
+                            agent_thought for agent_thought in agent_thoughts.values()
+                        ],
+                    },
+                )
                 thread.start()
 
             end_user_id = str(end_user.id)
@@ -189,7 +229,9 @@ class OpenApiService(BaseService):
             account_id = account.id
             app_id = app.id
 
-            return handle_stream(end_user_id, conversation_id, message_id, account_id, app_id)
+            return handle_stream(
+                end_user_id, conversation_id, message_id, account_id, app_id
+            )
 
         # 块内容输出 并将消息和推理过程添加到数据库
         agent_result = agent.invoke(agent_state)
@@ -203,26 +245,31 @@ class OpenApiService(BaseService):
                 "conversation_id": conversation.id,
                 "message_id": message.id,
                 "agent_thoughts": agent_result.agent_thoughts,
-            }
+            },
         )
         thread.start()
 
-        return Response(data={
-            "id": str(message.id),
-            "end_user_id": str(end_user.id),
-            "conversation_id": str(conversation.id),
-            "query": req.query.data,
-            "answer": agent_result.answer,
-            "total_token_count": 0,
-            "latency": agent_result.latency,
-            "agent_thoughts": [{
-                "id": str(agent_thought.id),
-                "event": agent_thought.event,
-                "thought": agent_thought.thought,
-                "observation": agent_thought.observation,
-                "tool": agent_thought.tool,
-                "tool_input": agent_thought.tool_input,
-                "latency": agent_thought.latency,
-                "created_at": 0,
-            } for agent_thought in agent_result.agent_thoughts]
-        })
+        return Response(
+            data={
+                "id": str(message.id),
+                "end_user_id": str(end_user.id),
+                "conversation_id": str(conversation.id),
+                "query": req.query.data,
+                "answer": agent_result.answer,
+                "total_token_count": 0,
+                "latency": agent_result.latency,
+                "agent_thoughts": [
+                    {
+                        "id": str(agent_thought.id),
+                        "event": agent_thought.event,
+                        "thought": agent_thought.thought,
+                        "observation": agent_thought.observation,
+                        "tool": agent_thought.tool,
+                        "tool_input": agent_thought.tool_input,
+                        "latency": agent_thought.latency,
+                        "created_at": 0,
+                    }
+                    for agent_thought in agent_result.agent_thoughts
+                ],
+            }
+        )

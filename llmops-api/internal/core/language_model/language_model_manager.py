@@ -28,7 +28,6 @@ from .entities.model_entity import (
     StructuredOutputStrategy,
 )
 
-
 FORBIDDEN_MODEL_PARAMETERS = {
     "api_key",
     "openai_api_key",
@@ -70,6 +69,13 @@ class LanguageModelManager(BaseModel):
 
         return self
 
+    def get_provider(self, provider_name: str) -> Optional[Provider]:
+        """根据提供商名称获取提供商"""
+        provider = self.provider_map.get(provider_name, None)
+        if provider is None:
+            raise NotFoundException("该提供商不存在!")
+        return provider
+
     def get_providers(self) -> list[Provider]:
         """获取所有提供者列表信息"""
         return list(self.provider_map.values())
@@ -81,13 +87,6 @@ class LanguageModelManager(BaseModel):
             for provider in self.provider_map.values()
             if provider.provider_entity.visible
         ]
-
-    def get_provider(self, provider_name: str) -> Optional[Provider]:
-        """根据提供商名称获取提供商"""
-        provider = self.provider_map.get(provider_name, None)
-        if provider is None:
-            raise NotFoundException("该提供商不存在!")
-        return provider
 
     def get_model_class_by_provider_and_type(
         self,
@@ -161,7 +160,8 @@ class LanguageModelManager(BaseModel):
 
         return config.model_copy(update={"parameters": validated_parameters})
 
-    def create_chat_model(
+    # 校验以及默认值
+    def create_language_model(
         self, model_config: Mapping[str, Any] | LanguageModelConfig
     ) -> BaseLanguageModel:
         """依据统一配置创建 Provider 对应的 LangChain 对话模型。"""
@@ -177,6 +177,7 @@ class LanguageModelManager(BaseModel):
             "metadata": model_entity.metadata,
         }
         provider_entity = provider.provider_entity
+
         if provider_entity.api_key_env:
             api_key = os.getenv(provider_entity.api_key_env)
             if not api_key:
@@ -195,13 +196,11 @@ class LanguageModelManager(BaseModel):
 
         return model_class(**init_kwargs)
 
-    def create_system_chat_model(
+    def create_default_language_model(
         self, parameters: Optional[Mapping[str, Any]] = None
     ) -> BaseLanguageModel:
         """创建不隶属于特定应用的系统辅助模型。"""
-        return self.create_chat_model(
-            self._get_system_model_config(parameters)
-        )
+        return self.create_language_model(self._get_system_model_config(parameters))
 
     def create_structured_chat_model(
         self,
@@ -226,28 +225,22 @@ class LanguageModelManager(BaseModel):
             if model_entity.structured_output_strict is not None
             else provider_entity.structured_output_strict
         )
-        llm = self.create_chat_model(config)
+        llm = self.create_language_model(config)
 
         if strategy == StructuredOutputStrategy.PROMPT:
-            structured_model = llm | PydanticOutputParser(
-                pydantic_object=schema
-            )
+            structured_model = llm | PydanticOutputParser(pydantic_object=schema)
         else:
             structured_kwargs: dict[str, Any] = {"method": strategy.value}
             if strategy == StructuredOutputStrategy.JSON_SCHEMA:
                 structured_kwargs["strict"] = strict
-            structured_model = llm.with_structured_output(
-                schema, **structured_kwargs
-            )
+            structured_model = llm.with_structured_output(schema, **structured_kwargs)
 
         def validate_structured_output(output: Any) -> BaseModel:
             if isinstance(output, schema):
                 return output
             return schema.model_validate(output)
 
-        validated_model = structured_model | RunnableLambda(
-            validate_structured_output
-        )
+        validated_model = structured_model | RunnableLambda(validate_structured_output)
         return validated_model.with_retry(
             retry_if_exception_type=(ValidationError, OutputParserException),
             wait_exponential_jitter=False,
@@ -278,9 +271,7 @@ class LanguageModelManager(BaseModel):
         }
 
     @staticmethod
-    def _validate_parameter_value(
-        name: str, value: Any, rule: ModelParameter
-    ) -> None:
+    def _validate_parameter_value(name: str, value: Any, rule: ModelParameter) -> None:
         """按照模型目录声明校验单个参数值。"""
         expected_type = rule.type
         valid_type = {

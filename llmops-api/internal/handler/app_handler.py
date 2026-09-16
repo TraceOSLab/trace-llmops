@@ -241,7 +241,7 @@ class AppHandler:
             # 创建聊天、工具、路由节点
             def chatbot(state: MessagesState) -> MessagesState:
                 """聊天对话节点"""
-                llm = self.language_model_manager.create_system_chat_model(
+                llm = self.language_model_manager.create_default_language_model(
                     {"temperature": 0.7}
                 ).bind_tools(tools)
 
@@ -361,7 +361,7 @@ class AppHandler:
 
     @login_required
     def ping(self):
-        llm = self.language_model_manager.create_system_chat_model()
+        llm = self.language_model_manager.create_default_language_model()
         return success_json(
             {
                 "content": llm.invoke("你好，你是").content,

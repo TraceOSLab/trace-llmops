@@ -20,7 +20,7 @@ def test_llm_node_uses_complete_provider_config(monkeypatch):
     captured = {}
 
     class FakeManager:
-        def create_chat_model(self, model_config):
+        def create_language_model(self, model_config):
             captured["model_config"] = model_config
             return fake_llm
 
