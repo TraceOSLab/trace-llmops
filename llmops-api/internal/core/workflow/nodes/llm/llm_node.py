@@ -39,8 +39,8 @@ class LLMNode(BaseNode):
         prompt_value = template.render(**inputs_dict)
 
         # 根据节点中的完整模型配置创建对应 Provider 的模型
-        llm = get_language_model_manager().create_chat_model(
-            self.node_data.language_model_co nfig
+        llm = get_language_model_manager().create_language_model(
+            self.node_data.language_model_config
         )
         content = ""
         for chunk in llm.stream(prompt_value):
