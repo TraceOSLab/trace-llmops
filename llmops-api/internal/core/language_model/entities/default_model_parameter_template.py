@@ -41,7 +41,7 @@ DEFAULT_MODEL_PARAMETER_TEMPLATE = {
         "required": False,
         "default": 0,
         "min": -2.0,
-        "max": 2.0, 
+        "max": 2.0,
         "precision": 2,
         "options": [],
     },
@@ -58,7 +58,7 @@ DEFAULT_MODEL_PARAMETER_TEMPLATE = {
         "options": [],
     },
     # 最大生成tokens数
-    DefaultModelParameterName.MAX_COMPLETION_TOKENS: {
+    DefaultModelParameterName.MAX_TOKENS: {
         "label": "最大标记",
         "type": ModelParameterType.INT,
         "help": "要生成的标记的最大数量，类型为整型",

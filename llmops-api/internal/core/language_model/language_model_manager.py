@@ -145,7 +145,7 @@ class LanguageModelManager(BaseModel):
 
             rule_name = name
             if name == "max_tokens" and name not in parameter_map:
-                rule_name = "max_completion_tokens"
+                rule_name = "max_tokens"
             rule = parameter_map.get(rule_name)
             if rule is None:
                 raise ValidateErrorException(f"模型参数{name}不存在")
@@ -153,7 +153,7 @@ class LanguageModelManager(BaseModel):
             validated_parameters[name] = value
 
         for name, rule in parameter_map.items():
-            compatible_name = "max_tokens" if name == "max_completion_tokens" else name
+            compatible_name = "max_tokens" if name == "max_tokens" else name
             if name not in supplied_names and compatible_name not in supplied_names:
                 if rule.default is not None:
                     validated_parameters[name] = rule.default
