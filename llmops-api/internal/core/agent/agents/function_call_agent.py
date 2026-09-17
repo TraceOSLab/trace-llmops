@@ -5,6 +5,7 @@
 @Time   :   2026/1/23 10:05
 @Author :   s.qiu@foxmail.com
 """
+
 import json
 import logging
 import re
@@ -12,21 +13,33 @@ import time
 import uuid
 from typing import Literal
 
-from langchain_core.messages import HumanMessage, SystemMessage, RemoveMessage, ToolMessage, \
-    messages_to_dict, AIMessage
+from langchain_core.messages import (
+    HumanMessage,
+    SystemMessage,
+    RemoveMessage,
+    ToolMessage,
+    messages_to_dict,
+    AIMessage,
+)
 from langgraph.constants import END
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from internal.core.agent.entities.agent_entity import AgentState, AGENT_SYSTEM_PROMPT_TEMPLATE, \
-    DATASET_RETRIEVAL_TOOL_NAME, MAX_ITERATION_RESPONSE
+from internal.core.agent.entities.agent_entity import (
+    AgentState,
+    AGENT_SYSTEM_PROMPT_TEMPLATE,
+    DATASET_RETRIEVAL_TOOL_NAME,
+    MAX_ITERATION_RESPONSE,
+)
 from internal.core.agent.entities.queue_entity import AgentThought, QueueEvent
+from internal.core.language_model.entities.model_entity import ModelFeature
 from internal.exception import FailException
 from .base_agent import BaseAgent
 
 
 class FunctionCallAgent(BaseAgent):
     """工具函数调用智能体"""
+
     name: str = "function_call_agent"
 
     def _build_agent(self) -> CompiledStateGraph:
@@ -40,10 +53,12 @@ class FunctionCallAgent(BaseAgent):
 
         # 起点、终点、条件边
         graph.set_entry_point("preset_operation")
-        graph.add_conditional_edges("preset_operation", self._preset_operation_condition)
+        graph.add_conditional_edges(
+            "preset_operation", self._preset_operation_condition
+        )
         graph.add_edge("long_term_memory_recall", "llm")
         graph.add_conditional_edges("llm", self._tools_condition)
-        graph.add_edge("tools", 'llm')
+        graph.add_edge("tools", "llm")
 
         # 编译
         agent = graph.compile()
@@ -55,23 +70,31 @@ class FunctionCallAgent(BaseAgent):
         query = state["messages"][-1].content
         # 是否开启审核配置
         if review_config["enable"] and review_config["inputs_config"]["enable"]:
-            contains_keyword = any(keyword in query for keyword in review_config["keywords"])
+            contains_keyword = any(
+                keyword in query for keyword in review_config["keywords"]
+            )
             if contains_keyword:
                 preset_response = review_config["inputs_config"]["preset_response"]
-                self.agent_queue_manager.publish(state["task_id"], AgentThought(
-                    id=uuid.uuid4(),
-                    task_id=state["task_id"],
-                    event=QueueEvent.AGENT_MESSAGE,
-                    thought=preset_response,
-                    message=messages_to_dict(state["messages"]),
-                    answer=preset_response,
-                    latency=0
-                ))
-                self.agent_queue_manager.publish(state["task_id"], AgentThought(
-                    id=uuid.uuid4(),
-                    task_id=state["task_id"],
-                    event=QueueEvent.AGENT_END
-                ))
+                self.agent_queue_manager.publish(
+                    state["task_id"],
+                    AgentThought(
+                        id=uuid.uuid4(),
+                        task_id=state["task_id"],
+                        event=QueueEvent.AGENT_MESSAGE,
+                        thought=preset_response,
+                        message=messages_to_dict(state["messages"]),
+                        answer=preset_response,
+                        latency=0,
+                    ),
+                )
+                self.agent_queue_manager.publish(
+                    state["task_id"],
+                    AgentThought(
+                        id=uuid.uuid4(),
+                        task_id=state["task_id"],
+                        event=QueueEvent.AGENT_END,
+                    ),
+                )
                 return {"messages": [AIMessage(preset_response)]}
         return {"messages": []}
 
@@ -82,27 +105,36 @@ class FunctionCallAgent(BaseAgent):
         long_term_memory = ""
         if self.agent_config.enable_long_term_memory:
             long_term_memory = state["long_term_memory"]
-            self.agent_queue_manager.publish(state["task_id"], AgentThought(
-                id=uuid.uuid4(),
-                task_id=state["task_id"],
-                event=QueueEvent.LONG_TERM_MEMORY_RECALL,
-                observation=long_term_memory
-            ))
+            self.agent_queue_manager.publish(
+                state["task_id"],
+                AgentThought(
+                    id=uuid.uuid4(),
+                    task_id=state["task_id"],
+                    event=QueueEvent.LONG_TERM_MEMORY_RECALL,
+                    observation=long_term_memory,
+                ),
+            )
 
         # 构建系统预设消息 preset_prompt+long_term_memory
         preset_prompt = [
-            SystemMessage(AGENT_SYSTEM_PROMPT_TEMPLATE.format(
-                preset_prompt=self.agent_config.preset_prompt,
-                long_term_memory=long_term_memory
-            ))
+            SystemMessage(
+                AGENT_SYSTEM_PROMPT_TEMPLATE.format(
+                    preset_prompt=self.agent_config.preset_prompt,
+                    long_term_memory=long_term_memory,
+                )
+            )
         ]
 
         # 将 history 添加到消息列表
         history = state["history"]
         if isinstance(history, list) and len(history) > 0:
             if len(history) % 2 != 0:
-                self.agent_queue_manager.publish_error(state["task_id"], "智能体历史消息格式错误")
-                logging.error(f"智能体历史消息列表格式错误，history={json.dumps(messages_to_dict(history))}")
+                self.agent_queue_manager.publish_error(
+                    state["task_id"], "智能体历史消息格式错误"
+                )
+                logging.error(
+                    f"智能体历史消息列表格式错误，history={json.dumps(messages_to_dict(history))}"
+                )
                 raise FailException("历史消息列表格式错误")
             preset_prompt.extend(history)
 
@@ -116,20 +148,26 @@ class FunctionCallAgent(BaseAgent):
 
         # 检测当前迭代次数是否符合
         if state["iteration_count"] > self.agent_config.max_iteration_count:
-            self.agent_queue_manager.publish(state["task_id"], AgentThought(
-                id=uuid.uuid4(),
-                task_id=state["task_id"],
-                event=QueueEvent.AGENT_MESSAGE,
-                thought=MAX_ITERATION_RESPONSE,
-                message=messages_to_dict(state["messages"]),
-                answer=MAX_ITERATION_RESPONSE,
-                latency=0
-            ))
-            self.agent_queue_manager.publish(state["task_id"], AgentThought(
-                id=uuid.uuid4(),
-                task_id=state["task_id"],
-                event=QueueEvent.AGENT_END
-            ))
+            self.agent_queue_manager.publish(
+                state["task_id"],
+                AgentThought(
+                    id=uuid.uuid4(),
+                    task_id=state["task_id"],
+                    event=QueueEvent.AGENT_MESSAGE,
+                    thought=MAX_ITERATION_RESPONSE,
+                    message=messages_to_dict(state["messages"]),
+                    answer=MAX_ITERATION_RESPONSE,
+                    latency=0,
+                ),
+            )
+            self.agent_queue_manager.publish(
+                state["task_id"],
+                AgentThought(
+                    id=uuid.uuid4(),
+                    task_id=state["task_id"],
+                    event=QueueEvent.AGENT_END,
+                ),
+            )
             return {"messages": [AIMessage(MAX_ITERATION_RESPONSE)]}
 
         id = uuid.uuid4()
@@ -137,7 +175,12 @@ class FunctionCallAgent(BaseAgent):
         start_at = time.perf_counter()
 
         # llm是否支持绑定工具 是否有可以绑定的工具
-        if hasattr(llm, "bind_tools") and callable(getattr(llm, "bind_tools")) and len(self.agent_config.tools) > 0:
+        if (
+            ModelFeature.TOOL_CALL in llm.features
+            and hasattr(llm, "bind_tools")
+            and callable(getattr(llm, "bind_tools"))
+            and len(self.agent_config.tools) > 0
+        ):
             llm = llm.bind_tools(self.agent_config.tools)
 
         # 流式调用模型 获取内容
@@ -162,40 +205,56 @@ class FunctionCallAgent(BaseAgent):
                     # 检测输出审核
                     review_config = self.agent_config.review_config
                     content = chunk.content
-                    if review_config["enable"] and review_config["outputs_config"]["enable"]:
+                    if (
+                        review_config["enable"]
+                        and review_config["outputs_config"]["enable"]
+                    ):
                         for keyword in review_config["keywords"]:
-                            content = re.sub(re.escape(keyword), "**", content, flags=re.IGNORECASE)
-                    self.agent_queue_manager.publish(state["task_id"], AgentThought(
-                        id=id,
-                        task_id=state["task_id"],
-                        event=QueueEvent.AGENT_MESSAGE,
-                        thought=content,
-                        message=messages_to_dict(state["messages"]),
-                        answer=content,
-                        latency=(time.perf_counter() - start_at)
-                    ))
+                            content = re.sub(
+                                re.escape(keyword), "**", content, flags=re.IGNORECASE
+                            )
+                    self.agent_queue_manager.publish(
+                        state["task_id"],
+                        AgentThought(
+                            id=id,
+                            task_id=state["task_id"],
+                            event=QueueEvent.AGENT_MESSAGE,
+                            thought=content,
+                            message=messages_to_dict(state["messages"]),
+                            answer=content,
+                            latency=(time.perf_counter() - start_at),
+                        ),
+                    )
         except FailException as e:
             logging.exception(f"LLM节点发生错误, 错误信息: {str(e)}")
-            self.agent_queue_manager.publish_error(state["task_id"], f"LLM节点发生错误, 错误信息: {str(e)}")
+            self.agent_queue_manager.publish_error(
+                state["task_id"], f"LLM节点发生错误, 错误信息: {str(e)}"
+            )
             raise e
 
         # 发布智能体推理事件
         if generation_type == "thought":
-            self.agent_queue_manager.publish(state["task_id"], AgentThought(
-                id=id,
-                task_id=state["task_id"],
-                event=QueueEvent.AGENT_THOUGHT,
-                thought=json.dumps(gathered.tool_calls),
-                message=messages_to_dict(state["messages"]),
-                latency=(time.perf_counter() - start_at)
-            ))
+            self.agent_queue_manager.publish(
+                state["task_id"],
+                AgentThought(
+                    id=id,
+                    task_id=state["task_id"],
+                    event=QueueEvent.AGENT_THOUGHT,
+                    thought=json.dumps(gathered.tool_calls),
+                    message=messages_to_dict(state["messages"]),
+                    latency=(time.perf_counter() - start_at),
+                ),
+            )
         elif generation_type == "message":
             # 如果LLM直接生成answer则表示已经拿到了最终答案，则停止监听
-            self.agent_queue_manager.publish(state["task_id"], AgentThought(
-                id=uuid.uuid4(),
-                task_id=state["task_id"],
-                event=QueueEvent.AGENT_END,
-            ))
+            self.agent_queue_manager.publish(
+                state["task_id"],
+                AgentThought(
+                    id=uuid.uuid4(),
+                    task_id=state["task_id"],
+                    event=QueueEvent.AGENT_END,
+                ),
+            )
 
         return {"messages": [gathered], "iteration_count": state["iteration_count"] + 1}
 
@@ -219,7 +278,12 @@ class FunctionCallAgent(BaseAgent):
                 tool_result = f"工具执行出错：{str(e)}"
 
             messages.append(
-                ToolMessage(name=tool_call["name"], tool_call_id=tool_call["id"], content=json.dumps(tool_result)))
+                ToolMessage(
+                    name=tool_call["name"],
+                    tool_call_id=tool_call["id"],
+                    content=json.dumps(tool_result),
+                )
+            )
 
             # 判断执行工具的名字，提交不同事件，涵盖智能体动作以及知识库检索
             event = (
@@ -227,23 +291,28 @@ class FunctionCallAgent(BaseAgent):
                 if tool_call["name"] != DATASET_RETRIEVAL_TOOL_NAME
                 else QueueEvent.DATASET_RETRIEVAL
             )
-            self.agent_queue_manager.publish(state["task_id"], AgentThought(
-                id=id,
-                task_id=state["task_id"],
-                event=event,
-                observation=json.dumps(tool_result),
-                tool=tool_call["name"],
-                tool_input=tool_call["args"],
-                latency=(time.perf_counter() - start_at),
-            ))
+            self.agent_queue_manager.publish(
+                state["task_id"],
+                AgentThought(
+                    id=id,
+                    task_id=state["task_id"],
+                    event=event,
+                    observation=json.dumps(tool_result),
+                    tool=tool_call["name"],
+                    tool_input=tool_call["args"],
+                    latency=(time.perf_counter() - start_at),
+                ),
+            )
         return {"messages": messages}
 
     @classmethod
-    def _preset_operation_condition(cls, state: AgentState) -> Literal["long_term_memory_recall", "__end__"]:
+    def _preset_operation_condition(
+        cls, state: AgentState
+    ) -> Literal["long_term_memory_recall", "__end__"]:
         """预设节点条件边 是否触发预设响应"""
         # 如果是AI消息 则为触发审核 直接结束
         message = state["messages"][-1]
-        if message.type == 'ai':
+        if message.type == "ai":
             return END
         return "long_term_memory_recall"
 
