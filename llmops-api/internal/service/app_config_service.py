@@ -79,7 +79,7 @@ class AppConfigService(BaseService):
         workflows = []
 
         return self._process_and_transformer_app_config(
-            tools, workflows, datasets, app_config
+            validate_model_config, tools, workflows, datasets, app_config
         )
 
     def get_draft_app_config(self, app: App) -> dict[str, Any]:
@@ -112,7 +112,7 @@ class AppConfigService(BaseService):
         workflows = []
 
         return self._process_and_transformer_app_config(
-            tools, workflows, datasets, draft_app_config
+            validate_model_config, tools, workflows, datasets, draft_app_config
         )
 
     def get_langchain_tools_by_tools_config(
@@ -150,6 +150,7 @@ class AppConfigService(BaseService):
     @classmethod
     def _process_and_transformer_app_config(
         cls,
+        model_config: dict[str, Any],
         tools: list[dict],
         workflows: list[dict],
         datasets: list[dict],
@@ -158,7 +159,7 @@ class AppConfigService(BaseService):
         """根据传递的插件列表、工作流列表、知识库列表以及应用配置创建字典信息"""
         return {
             "id": str(app_config.id),
-            "model_config": app_config.model_config,
+            "model_config": model_config,
             "dialog_round": app_config.dialog_round,
             "preset_prompt": app_config.preset_prompt,
             "tools": tools,
