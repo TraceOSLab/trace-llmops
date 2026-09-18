@@ -336,7 +336,7 @@ class AppHandler:
                 item = q.get()
                 if item is None:
                     break
-                yield f"event: {item.get('event')}\ndata: {json.dumps(item)}\n\n"
+                yield f"event: {item.get('event').value}\ndata: {json.dumps(item)}\n\n"
                 q.task_done()
 
         t = Thread(target=graph_app)
