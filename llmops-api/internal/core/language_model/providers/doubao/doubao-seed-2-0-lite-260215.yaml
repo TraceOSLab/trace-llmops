@@ -24,3 +24,16 @@ parameters:
     use_template: max_tokens
     default: 8192
     max: 32768
+metadata:
+  pricing:
+    currency: CNY
+    unit: "0.000001"
+    source: https://www.volcengine.com/product/doubao/
+    checked_at: "2026-09-18"
+    # 仅配置已核对的短输入档；更长请求保留 tokens，费用标为 missing_pricing。
+    # 阈值来源：https://www.volcengine.com/docs/84458/1585097
+    tiers:
+      - max_input_tokens: 32000
+        input: "0.6"
+        output: "3.6"
+        cache_read: "0.12"

@@ -7,6 +7,7 @@
 """
 
 from abc import ABC
+from decimal import Decimal
 from enum import Enum
 from typing import Any, Optional
 
@@ -87,7 +88,9 @@ class ModelEntity(BaseModel):
     context_window: int = 0  # 上下文窗口长度（输入+输出）
     max_output_tokens: int = 0  # 最大输出token数（输出）
     attributes: dict[str, Any] = Field(default_factory=dict)  # 模型属性
-    parameters: list[ModelParameter] = Field(default_factory=list)  # 模型参数字段规则列表
+    parameters: list[ModelParameter] = Field(
+        default_factory=list
+    )  # 模型参数字段规则列表
     metadata: dict[str, Any] = Field(
         default_factory=dict
     )  # 模型元数据 存储模型额外数据
@@ -111,3 +114,13 @@ class BaseLanguageModel(LCBaseLanguageModel, ABC):
 
     features: list[ModelFeature] = Field(default_factory=list)  # 模型特性
     metadata: dict[str, Any] = Field(default_factory=dict)  # 模型元数据信息
+
+    def get_pricing(self) -> tuple[Decimal, Decimal, Decimal] | None:
+        """兼容入口，仅返回固定价；阶梯/时段/缓存结算使用 collect_usage。"""
+        from internal.core.language_model.usage import ModelPricing
+
+        pricing = ModelPricing.model_validate(self.metadata.get("pricing") or {})
+        if (pricing.input is None or pricing.output is None or pricing.tiers
+                or pricing.schedule != "flat"):
+            return None
+        return pricing.input, pricing.output, pricing.unit

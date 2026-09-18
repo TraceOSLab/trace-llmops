@@ -32,6 +32,10 @@ class GetAssistantAgentMessagesWithPageResp(Schema):
     query = fields.String(dump_default="")
     answer = fields.String(dump_default="")
     total_token_count = fields.Integer(dump_default=0)
+    message_token_count = fields.Integer(dump_default=0)
+    answer_token_count = fields.Integer(dump_default=0)
+    total_price = fields.String(allow_none=True)
+    usage = fields.Dict(dump_default={})
     latency = fields.Float(dump_default=0)
     agent_thoughts = fields.List(fields.Dict, dump_default=[])
     created_at = fields.Integer(dump_default=0)
@@ -44,6 +48,10 @@ class GetAssistantAgentMessagesWithPageResp(Schema):
             "query": data.query,
             "answer": data.answer,
             "total_token_count": data.total_token_count,
+            "message_token_count": data.message_token_count,
+            "answer_token_count": data.answer_token_count,
+            "total_price": (data.usage or {}).get("total_price"),
+            "usage": data.usage or {},
             "latency": data.latency,
             "agent_thoughts": [
                 {
@@ -54,6 +62,7 @@ class GetAssistantAgentMessagesWithPageResp(Schema):
                     "observation": agent_thought.observation,
                     "tool": agent_thought.tool,
                     "tool_input": agent_thought.tool_input,
+                    "usage": agent_thought.usage or {},
                     "latency": agent_thought.latency,
                     "created_at": datetime_to_timestamp(agent_thought.created_at),
                 }

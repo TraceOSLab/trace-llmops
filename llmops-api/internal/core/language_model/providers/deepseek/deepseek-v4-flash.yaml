@@ -23,3 +23,13 @@ parameters:
     use_template: max_tokens
     default: 8192
     max: 393216
+metadata:
+  pricing:
+    input: "2"
+    output: "8"
+    cache_read: "0.04"
+    unit: "0.000001"
+    currency: CNY
+    schedule: deepseek_peak
+    source: https://api-docs.deepseek.com/zh-cn/quick_start/pricing/
+    checked_at: "2026-09-18"

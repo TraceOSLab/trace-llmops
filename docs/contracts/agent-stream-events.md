@@ -7,12 +7,12 @@
 流式接口返回 UTF-8 编码的 Server-Sent Events，`Content-Type` 为 `text/event-stream`。当前 Agent Stream 的实际格式类似：
 
 ```text
-event: QueueEvent.AGENT_MESSAGE
+event: agent_message
 data: {"event":"agent_message","id":"...","conversation_id":"...","message_id":"...","task_id":"...","thought":"...","observation":"","tool":"","tool_input":{},"answer":"Hello","latency":0.12}
 
 ```
 
-当前代码由各 Service 手写 SSE 字符串。`app_service.py` 和 `openapi_service.py` 直接把 `QueueEvent` 放入 f-string，因此 `event:` 可能是 `QueueEvent.AGENT_MESSAGE`，而 JSON 中的 `event` 是 `agent_message`；部分直接使用普通字符串的调试代码则不会出现这个前缀。当前既没有统一模型，也没有契约测试强制二者一致。
+当前代码由各 Service 手写 SSE 字符串。应用调试、公开 API 和辅助智能体使用 `QueueEvent.value` 作为事件名；这三个生产方共享事件合并和用量序列化函数，但尚未建立统一 SSE 编码器。
 
 ## 公共字段
 
@@ -48,6 +48,20 @@ data: {"event":"agent_message","id":"...","conversation_id":"...","message_id":"
 
 - `optimize_prompt` 携带 `optimize_prompt` 文本片段。
 - `workflow` 直接在顶层携带当前 Workflow Node 的结果字段。
+
+## Agent 用量字段（2026-09-18）
+
+应用调试、公开 API 和辅助智能体的 SSE 新增 `message_token_count`、`answer_token_count`、`total_token_count`、`total_price` 和 `usage`。原有事件名和文本字段保持不变。金额通过 Decimal 计算，JSON 金额使用字符串，未知费用使用 `null`；旧数值列中的零不能用于判断调用是否免费。
+
+- 普通文本片段的 `usage` 为 `null`，不能根据该片段的零计数判定本轮免费。
+- 每次 LLM 调用结束后，工具调用使用 `agent_thought` 携带结算数据；普通回答发送与文本片段同一个 `id` 的空 `agent_message`，携带整次调用的用量。合并时拼接文本，但覆盖统计字段，不累加结算快照。
+- 步骤 `usage` 保存 `provider`、`model`、`response_model`、输入/输出/缓存/推理 token、`source`、`complete`、`price_status`、币种和费率快照。缓存、推理是输入/输出的细分，不再加到总量。
+- `agent_end`、`error`、`stop`、`timeout` 的 `usage` 是当前 Agent 的汇总，`scope=agent`，包含 `call_count`、已知 token 小计、`complete`、`total_price` 和按币种区分的 `known_costs`。异常终止保守标记为不完整。
+- 公开 API 非流式响应和历史消息接口使用相同汇总口径；`Message.usage` 保存汇总，`MessageAgentThought.usage` 保存调用明细。历史记录没有快照时返回 `{}`，不追溯估算历史账单。
+
+目前只统计本次 Agent 主循环中的模型调用；摘要、标题、建议问题及独立 Workflow 的辅助调用不包括在 `scope=agent` 中。底层 SDK 未返回响应的重试、断流后的供应商实际收费无法由本地精确恢复。客户端断开导致 Service Generator 未运行到保存逻辑的情况仍受现有后台持久化设计限制。
+
+价格配置、迁移和验证见 [模型用量统计](../runbooks/model-usage.md)。未来前端消费金额前须检查 `usage.complete` 和 `usage.total_price`，并标明“按价目表计算”，不将其作为供应商实际扣款。
 
 ## 后续兼容原则
 

@@ -25,6 +25,7 @@ from internal.core.agent.entities.queue_entity import (
     AgentResult,
     QueueEvent,
 )
+from internal.core.agent.usage import merge_agent_thought, summarize_usage, summary_fields
 from internal.exception import FailException
 
 
@@ -64,40 +65,12 @@ class BaseAgent(Serializable, Runnable):
         agent_result = AgentResult(query=input["messages"][0].content)
         agent_thoughts = {}
         for agent_thought in self.stream(input, config):
-            event_id = str(agent_thought.id)
-            # 记录事件 排除PING事件
-            if agent_thought.event != QueueEvent.PING:
-                # 处理 agent_thought 事件为 agent_message 事件为数据叠加
-                if agent_thought.event == QueueEvent.AGENT_MESSAGE:
-                    if event_id not in agent_thoughts:
-                        agent_thoughts[event_id] = agent_thought
-                    else:
-                        agent_thoughts[event_id] = agent_thoughts[event_id].model_copy(
-                            update={
-                                "thought": agent_thoughts[event_id].thought
-                                + agent_thought.thought,
-                                "answer": agent_thoughts[event_id].answer
-                                + agent_thought.answer,
-                                "latency": agent_thought.latency,
-                            }
-                        )
-                    # 拼接智能体回答消息
-                    agent_result.answer += agent_thought.answer
-
-                # 处理 agent_though 其他事件 直接覆盖 并且当放生异常事件需要更新状态记录异常
-                else:
-                    agent_thoughts[event_id] = agent_thought
-                    if agent_thought.event in [
-                        QueueEvent.STOP,
-                        QueueEvent.TIMEOUT,
-                        QueueEvent.ERROR,
-                    ]:
-                        agent_result.status = agent_thought.event
-                        agent_result.error = (
-                            agent_thought.observation
-                            if agent_thought.event == QueueEvent.ERROR
-                            else ""
-                        )
+            merge_agent_thought(agent_thoughts, agent_thought)
+            if agent_thought.event == QueueEvent.AGENT_MESSAGE:
+                agent_result.answer += agent_thought.answer
+            if agent_thought.event in {QueueEvent.STOP, QueueEvent.TIMEOUT, QueueEvent.ERROR}:
+                agent_result.status = agent_thought.event
+                agent_result.error = agent_thought.observation if agent_thought.event == QueueEvent.ERROR else ""
 
         # 合并推理
         agent_result.agent_thoughts = [
@@ -117,7 +90,9 @@ class BaseAgent(Serializable, Runnable):
             [agent_thought.latency for agent_thought in agent_thoughts.values()]
         )
 
-        return agent_result
+        return agent_result.model_copy(update=summary_fields(
+            summarize_usage(agent_result.agent_thoughts)
+        ))
 
     def stream(
         self,

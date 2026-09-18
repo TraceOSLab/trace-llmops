@@ -198,7 +198,7 @@ def test_legacy_max_tokens_parameter_is_accepted_and_defaults_are_applied(manage
     )
 
     assert config.parameters["max_tokens"] == 1024
-    assert "max_tokens" not in config.parameters
+    assert "max_completion_tokens" not in config.parameters
     assert config.parameters["temperature"] == 1
 
 

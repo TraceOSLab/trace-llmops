@@ -7,11 +7,13 @@
 """
 
 from enum import Enum
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 from internal.entity.conversation_entity import MessageStatus
+from internal.core.language_model.usage import TokenUsage
 
 
 class QueueEvent(str, Enum):
@@ -43,20 +45,21 @@ class AgentThought(BaseModel):
     tool_input: dict = Field(default_factory=dict)  # 工具的输入
 
     # 消息相关的数据
-    message: list[dict] = Field(default_factory=dict)  # 推理使用的消息列表
+    message: list[dict] = Field(default_factory=list)  # 推理使用的消息列表
     message_token_count: int = 0  # 消息花费的token数
-    message_unit_price: float = 0  # 单价
-    message_price_unit: float = 0  # 价格单位
+    message_unit_price: Decimal = Decimal("0")  # 单价
+    message_price_unit: Decimal = Decimal("0")  # 价格换算乘数
 
     # 答案相关的数据
     answer: str = ""  # LLM生成的最终答案
     answer_token_count: int = 0  # LLM生成答案的token数
-    answer_unit_price: float = 0  # 单价
-    answer_price_unit: float = 0  # 价格单位
+    answer_unit_price: Decimal = Decimal("0")  # 单价
+    answer_price_unit: Decimal = Decimal("0")  # 价格换算乘数
 
     # Agent推理统计相关
     total_token_count: int = 0  # 总token消耗数量
-    total_price: float = 0  # 总价格
+    total_price: Decimal = Decimal("0")  # 已知价格；完整状态见 usage
+    usage: TokenUsage | None = None
     latency: float = 0  # 步骤推理耗时
 
 
@@ -66,16 +69,17 @@ class AgentResult(BaseModel):
 
     message: list[dict] = Field(default_factory=list)  # 最终答案的消息列表
     message_token_count: int = 0  # 消息花费的token数
-    message_unit_price: float = 0  # 单价
-    message_price_unit: float = 0  # 价格单位
+    message_unit_price: Decimal = Decimal("0")  # 单价
+    message_price_unit: Decimal = Decimal("0")  # 价格换算乘数
 
     answer: str = ""  # 最终答案
     answer_token_count: int = 0  # LLM生成答案的token数
-    answer_unit_price: float = 0  # 单价
-    answer_price_unit: float = 0  # 价格单位
+    answer_unit_price: Decimal = Decimal("0")  # 单价
+    answer_price_unit: Decimal = Decimal("0")  # 价格换算乘数
 
     total_token_count: int = 0  # 总token消耗数量
-    total_price: float = 0  # 总价格
+    total_price: Decimal = Decimal("0")
+    usage: dict = Field(default_factory=dict)  # Agent 所有调用的汇总
     latency: float = 0  # 步骤推理耗时
 
     status: str = MessageStatus.NORMAL  # 消息状态

@@ -174,7 +174,11 @@ class LanguageModelManager(BaseModel):
             **model_entity.attributes,
             **config.parameters,
             "features": model_entity.features,
-            "metadata": model_entity.metadata,
+            "metadata": {
+                **model_entity.metadata,
+                "provider": config.provider,
+                "model": config.model,
+            },
         }
         provider_entity = provider.provider_entity
 

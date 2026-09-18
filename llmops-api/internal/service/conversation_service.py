@@ -17,6 +17,9 @@ from langchain_core.output_parsers import PydanticOutputParser, StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
 from internal.core.agent.entities.queue_entity import AgentThought, QueueEvent
+from internal.core.agent.usage import (
+    merge_agent_thought, summarize_usage, summary_fields, thought_usage_fields,
+)
 from internal.core.language_model import LanguageModelManager
 from internal.entity.conversation_entity import (
     SUMMARIZER_TEMPLATE,
@@ -140,6 +143,12 @@ class ConversationService(BaseService):
             conversation = self.get(Conversation, conversation_id)
             message = self.get(Message, message_id)
 
+            # 兼容调用方传入尚未合并的文本片段和最终统计事件。
+            merged = {}
+            for item in agent_thoughts:
+                merge_agent_thought(merged, item)
+            agent_thoughts = list(merged.values())
+
             # 存储智能体推理过程
             for agent_thought in agent_thoughts:
                 #  存储 记忆召回、推理、消息、动作、知识库检索 步骤
@@ -152,12 +161,11 @@ class ConversationService(BaseService):
                     # 更新位置及总耗时
                     position += 1
                     latency += agent_thought.latency
-                    self.create(
-                        MessageAgentThought,
+                    values = dict(
                         app_id=app_id,
                         conversation_id=conversation.id,
                         message_id=message.id,
-                        invoke_from=InvokeFrom.DEBUGGER,
+                        invoke_from=message.invoke_from,
                         created_by=account_id,
                         position=position,
                         event=agent_thought.event,
@@ -168,7 +176,13 @@ class ConversationService(BaseService):
                         message=agent_thought.message,
                         answer=agent_thought.answer,
                         latency=agent_thought.latency,
+                        **thought_usage_fields(agent_thought),
                     )
+                    existing = self.db.session.get(MessageAgentThought, agent_thought.id)
+                    if existing is None:
+                        self.create(MessageAgentThought, id=agent_thought.id, **values)
+                    else:
+                        self.update(existing, **values)
 
                 # 时间是否为 agent_message
                 if agent_thought.event == QueueEvent.AGENT_MESSAGE:
@@ -201,15 +215,11 @@ class ConversationService(BaseService):
                         )
                         self.update(conversation, name=new_conversation_name)
 
-                    # 判断是否为停止或者错误，如果是则需要更新消息状态
-                    if agent_thought.event in [
-                        QueueEvent.STOP,
-                        QueueEvent.ERROR,
-                        QueueEvent.TIMEOUT,
-                    ]:
-                        self.update(
-                            message,
-                            status=agent_thought.event,
-                            observation=agent_thought.observation,
-                        )
-                        break
+                # 终止事件不是 AGENT_MESSAGE；放在消息分支外处理。
+                if agent_thought.event in [QueueEvent.STOP, QueueEvent.ERROR, QueueEvent.TIMEOUT]:
+                    self.update(
+                        message, status=agent_thought.event.value,
+                        error=agent_thought.observation if agent_thought.event == QueueEvent.ERROR else "",
+                    )
+
+            self.update(message, **summary_fields(summarize_usage(agent_thoughts)))

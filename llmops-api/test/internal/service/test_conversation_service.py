@@ -87,7 +87,7 @@ def test_summary_failure_does_not_interrupt_message_and_title_updates():
     conversation = SimpleNamespace(
         id=uuid4(), summary="旧摘要", is_new=True, name="New Conversation"
     )
-    message = SimpleNamespace(id=uuid4(), query="你好", answer="")
+    message = SimpleNamespace(id=uuid4(), query="你好", answer="", invoke_from="debugger")
     service.get = MagicMock(side_effect=[conversation, message])
     service.create = MagicMock()
     service.update = MagicMock()

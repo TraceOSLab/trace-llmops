@@ -24,6 +24,7 @@ from sqlalchemy import func, desc
 
 from internal.core.agent.agents import FunctionCallAgent, AgentQueueManager
 from internal.core.agent.entities import AgentConfig
+from internal.core.agent.usage import merge_agent_thought, stream_payload
 from internal.core.agent.entities.queue_entity import QueueEvent
 from internal.core.language_model.entities.model_entity import ModelParameterType
 from internal.core.memory import TokenBufferMemory
@@ -578,36 +579,9 @@ class AppService(BaseService):
         ):
             event_id = str(agent_thought.id)
 
-            # agent_thought 填充数据 除 agent_message 外的消息都进行覆盖处理
-            if agent_thought.event != QueueEvent.PING:
-                if agent_thought.event == QueueEvent.AGENT_MESSAGE:
-                    if event_id not in agent_thoughts:
-                        agent_thoughts[event_id] = agent_thought
-                    else:
-                        agent_thoughts[event_id] = agent_thoughts[event_id].model_copy(
-                            update={
-                                "thought": agent_thoughts[event_id].thought
-                                + agent_thought.thought,
-                                "answer": agent_thoughts[event_id].answer
-                                + agent_thought.answer,
-                                "latency": agent_thought.latency,
-                            }
-                        )
-                else:
-                    agent_thoughts[event_id] = agent_thought
-
+            merge_agent_thought(agent_thoughts, agent_thought)
             data = {
-                **agent_thought.model_dump(
-                    include={
-                        "event",
-                        "thought",
-                        "observation",
-                        "tool",
-                        "tool_input",
-                        "answer",
-                        "latency",
-                    }
-                ),
+                **stream_payload(agent_thought, agent_thoughts),
                 "id": event_id,
                 "conversation_id": str(debug_conversation.id),
                 "message_id": str(message.id),

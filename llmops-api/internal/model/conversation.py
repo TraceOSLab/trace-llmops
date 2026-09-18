@@ -80,14 +80,14 @@ class Message(db.Model):
     query = Column(Text, nullable=False, server_default=text("''::text"))  # 用户提问的原始query
     message = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 产生answer的消息列表
     message_token_count = Column(Integer, nullable=False, server_default=text("0"))  # 消息列表的token总数
-    message_unit_price = Column(Numeric(10, 7), nullable=False, server_default=text("0.0"))  # 消息的单价
-    message_price_unit = Column(Numeric(10, 4), nullable=False, server_default=text("0.0"))  # 消息的价格单位
+    message_unit_price = Column(Numeric(18, 10), nullable=False, server_default=text("0.0"))  # 消息的单价
+    message_price_unit = Column(Numeric(18, 10), nullable=False, server_default=text("0.0"))  # 消息的价格单位
 
     # 消息关联的答案信息
     answer = Column(Text, nullable=False, server_default=text("''::text"))  # Agent生成的消息答案
     answer_token_count = Column(Integer, nullable=False, server_default=text("0"))  # 消息答案的token数
-    answer_unit_price = Column(Numeric(10, 7), nullable=False, server_default=text("0.0"))  # token的单位价格
-    answer_price_unit = Column(Numeric(10, 4), nullable=False, server_default=text("0.0"))  # token的价格单位
+    answer_unit_price = Column(Numeric(18, 10), nullable=False, server_default=text("0.0"))  # token的单位价格
+    answer_price_unit = Column(Numeric(18, 10), nullable=False, server_default=text("0.0"))  # token的价格单位
 
     # 消息的相关统计信息
     latency = Column(Float, nullable=False, server_default=text("0.0"))  # 消息的总耗时
@@ -95,7 +95,9 @@ class Message(db.Model):
     status = Column(String(255), nullable=False, server_default=text("''::character varying"))  # 消息的状态，涵盖正常、错误、停止
     error = Column(Text, nullable=False, server_default=text("''::text"))  # 发生错误时记录的信息
     total_token_count = Column(Integer, nullable=False, server_default=text("0"))  # 消耗的总token数，计算步骤的消耗
-    total_price = Column(Numeric(10, 7), nullable=False, server_default=text("0.0"))  # 消耗的总价格，计算步骤的总消耗
+    total_price = Column(Numeric(18, 10), nullable=False, server_default=text("0.0"))  # 消耗的总价格，计算步骤的总消耗
+
+    usage = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))  # Agent 用量完整性及费用汇总
 
     # 消息时间相关信息
     updated_at = Column(
@@ -148,27 +150,29 @@ class MessageAgentThought(db.Model):
     # Agent推理观察步骤使用的消息列表(传递prompt消息内容)
     message = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))  # 该步骤调用LLM使用的提示消息
     message_token_count = Column(Integer, nullable=False, server_default=text("0"))  # 消息花费的token数
-    message_unit_price = Column(Numeric(10, 7), nullable=False, server_default=text("0.0"))  # 单价，所有LLM的计算方式统一为CNY
+    message_unit_price = Column(Numeric(18, 10), nullable=False, server_default=text("0.0"))  # 单价，币种记录在 usage 中
     message_price_unit = Column(
-        Numeric(10, 4),
+        Numeric(18, 10),
         nullable=False,
         server_default=text("0"),
-    )  # 价格单位，值为1000代表1000token对应的单价
+    )  # 价格换算乘数，0.000001 表示每百万 token
 
     # LLM生成内容相关(生成内容)
     answer = Column(Text, nullable=False, server_default=text("''::text"))  # LLM生成的答案内容，值和thought保持一致
     answer_token_count = Column(Integer, nullable=False, server_default=text("0"))  # LLM生成答案消耗token数
-    answer_unit_price = Column(Numeric(10, 7), nullable=False, server_default=text("0.0"))  # 单价，所有LLM的计算方式统一为CNY
+    answer_unit_price = Column(Numeric(18, 10), nullable=False, server_default=text("0.0"))  # 单价，币种记录在 usage 中
     answer_price_unit = Column(
-        Numeric(10, 4),
+        Numeric(18, 10),
         nullable=False,
         server_default=text("0.0"),
-    )  # 价格单位，值为1000代表1000token对应的单价
+    )  # 价格换算乘数，0.000001 表示每百万 token
 
     # Agent推理观察统计相关
     total_token_count = Column(Integer, nullable=False, server_default=text("0"))  # 总消耗token
-    total_price = Column(Numeric(10, 7), nullable=False, server_default=text("0.0"))  # 总消耗
+    total_price = Column(Numeric(18, 10), nullable=False, server_default=text("0.0"))  # 总消耗
     latency = Column(Float, nullable=False, server_default=text("0.0"))  # 推理观察步骤耗时
+
+    usage = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))  # 单次调用用量与价格快照
 
     # 时间相关信息
     updated_at = Column(

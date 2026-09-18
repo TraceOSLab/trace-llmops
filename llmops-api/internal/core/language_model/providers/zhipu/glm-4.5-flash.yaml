@@ -23,3 +23,13 @@ parameters:
     use_template: max_tokens
     default: 8192
     max: 16384
+metadata:
+  pricing:
+    input: '4'
+    output: '14'
+    cache_read: '2'
+    unit: '0.000001'
+    currency: CNY
+    schedule: flat
+    source: https://docs.bigmodel.cn/cn/guide/start/pricing
+    checked_at: '2026-09-18'

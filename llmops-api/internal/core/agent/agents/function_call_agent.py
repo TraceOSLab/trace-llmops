@@ -11,6 +11,7 @@ import logging
 import re
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import Literal
 
 from langchain_core.messages import (
@@ -33,6 +34,7 @@ from internal.core.agent.entities.agent_entity import (
 )
 from internal.core.agent.entities.queue_entity import AgentThought, QueueEvent
 from internal.core.language_model.entities.model_entity import ModelFeature
+from internal.core.language_model.usage import TokenUsage, collect_usage
 from internal.exception import FailException
 from .base_agent import BaseAgent
 
@@ -84,6 +86,7 @@ class FunctionCallAgent(BaseAgent):
                         thought=preset_response,
                         message=messages_to_dict(state["messages"]),
                         answer=preset_response,
+                        usage=TokenUsage.not_called(),
                         latency=0,
                     ),
                 )
@@ -157,6 +160,7 @@ class FunctionCallAgent(BaseAgent):
                     thought=MAX_ITERATION_RESPONSE,
                     message=messages_to_dict(state["messages"]),
                     answer=MAX_ITERATION_RESPONSE,
+                    usage=TokenUsage.not_called(),
                     latency=0,
                 ),
             )
@@ -173,6 +177,7 @@ class FunctionCallAgent(BaseAgent):
         id = uuid.uuid4()
         llm = self.llm
         start_at = time.perf_counter()
+        started_at = datetime.now(timezone.utc)
 
         # llm是否支持绑定工具 是否有可以绑定的工具
         if (
@@ -185,10 +190,16 @@ class FunctionCallAgent(BaseAgent):
 
         # 流式调用模型 获取内容
         gathered = None
+        last_usage_chunk = None
         is_first_chunk = True
         generation_type = ""
         try:
             for chunk in llm.stream(state["messages"]):
+                # 用量是整次请求的快照。不要累加每个 chunk 的累计用量。
+                if chunk.usage_metadata is not None or chunk.response_metadata.get(
+                    "token_usage"
+                ):
+                    last_usage_chunk = chunk
                 if is_first_chunk:
                     gathered = chunk
                     is_first_chunk = False
@@ -201,7 +212,7 @@ class FunctionCallAgent(BaseAgent):
                 elif chunk.content:
                     generation_type = "message"
                 # 发布智能体消息事件
-                if generation_type == "message":
+                if generation_type == "message" and chunk.content:
                     # 检测输出审核
                     review_config = self.agent_config.review_config
                     content = chunk.content
@@ -225,12 +236,42 @@ class FunctionCallAgent(BaseAgent):
                             latency=(time.perf_counter() - start_at),
                         ),
                     )
-        except FailException as e:
+        except Exception as e:
+            usage = collect_usage(
+                last_usage_chunk, self.llm.metadata, started_at, complete=False
+            )
+            self.agent_queue_manager.publish(
+                state["task_id"],
+                AgentThought(
+                    id=id,
+                    task_id=state["task_id"],
+                    event=(QueueEvent.AGENT_MESSAGE if generation_type == "message"
+                           else QueueEvent.AGENT_THOUGHT),
+                    message=messages_to_dict(state["messages"]),
+                    usage=usage,
+                    **usage.legacy_fields(),
+                    latency=time.perf_counter() - start_at,
+                ),
+            )
             logging.exception(f"LLM节点发生错误, 错误信息: {str(e)}")
             self.agent_queue_manager.publish_error(
                 state["task_id"], f"LLM节点发生错误, 错误信息: {str(e)}"
             )
             raise e
+
+        # 使用供应商返回的用量，禁止拿 GPT 的 tokenizer 重新估算账单。
+        usage_message = last_usage_chunk
+        if usage_message is not None and gathered is not None:
+            gathered = gathered.model_copy(update={
+                "usage_metadata": usage_message.usage_metadata,
+                "response_metadata": {**gathered.response_metadata, **usage_message.response_metadata},
+            })
+            usage_message = gathered
+        usage = collect_usage(usage_message, self.llm.metadata, started_at)
+        # 即使没有可见文本（例如纯思考或空回复），也要结算本次调用。
+        generation_type = (
+            "thought" if gathered is not None and gathered.tool_calls else "message"
+        )
 
         # 发布智能体推理事件
         if generation_type == "thought":
@@ -242,10 +283,24 @@ class FunctionCallAgent(BaseAgent):
                     event=QueueEvent.AGENT_THOUGHT,
                     thought=json.dumps(gathered.tool_calls),
                     message=messages_to_dict(state["messages"]),
+                    usage=usage,
+                    **usage.legacy_fields(),
                     latency=(time.perf_counter() - start_at),
                 ),
             )
         elif generation_type == "message":
+            self.agent_queue_manager.publish(
+                state["task_id"],
+                AgentThought(
+                    id=id,
+                    task_id=state["task_id"],
+                    event=QueueEvent.AGENT_MESSAGE,
+                    message=messages_to_dict(state["messages"]),
+                    usage=usage,
+                    **usage.legacy_fields(),
+                    latency=time.perf_counter() - start_at,
+                ),
+            )
             # 如果LLM直接生成answer则表示已经拿到了最终答案，则停止监听
             self.agent_queue_manager.publish(
                 state["task_id"],
@@ -256,7 +311,10 @@ class FunctionCallAgent(BaseAgent):
                 ),
             )
 
-        return {"messages": [gathered], "iteration_count": state["iteration_count"] + 1}
+        return {
+            "messages": [gathered or AIMessage(content="")],
+            "iteration_count": state["iteration_count"] + 1,
+        }
 
     def _tools_node(self, state: AgentState) -> AgentState:
         """工具节点"""

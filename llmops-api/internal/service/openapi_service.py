@@ -17,6 +17,7 @@ from langchain_core.messages import HumanMessage
 
 from internal.core.agent.agents import FunctionCallAgent
 from internal.core.agent.entities import AgentConfig
+from internal.core.agent.usage import merge_agent_thought, stream_payload
 from internal.core.agent.entities.queue_entity import QueueEvent
 from internal.core.memory import TokenBufferMemory
 from internal.core.language_model import LanguageModelManager
@@ -168,37 +169,9 @@ class OpenApiService(BaseService):
 
                 for agent_thought in agent.stream(agent_state):
                     event_id = str(agent_thought.id)
-                    # agent_thought 填充数据 除 agent_message 外的消息都进行覆盖处理
-                    if agent_thought.event != QueueEvent.PING:
-                        if agent_thought.event == QueueEvent.AGENT_MESSAGE:
-                            if event_id not in agent_thoughts:
-                                agent_thoughts[event_id] = agent_thought
-                            else:
-                                agent_thoughts[event_id] = agent_thoughts[
-                                    event_id
-                                ].model_copy(
-                                    update={
-                                        "thought": agent_thoughts[event_id].thought
-                                        + agent_thought.thought,
-                                        "answer": agent_thoughts[event_id].answer
-                                        + agent_thought.answer,
-                                        "latency": agent_thought.latency,
-                                    }
-                                )
-                        else:
-                            agent_thoughts[event_id] = agent_thought
+                    merge_agent_thought(agent_thoughts, agent_thought)
                     data = {
-                        **agent_thought.model_dump(
-                            include={
-                                "event",
-                                "thought",
-                                "observation",
-                                "tool",
-                                "tool_input",
-                                "answer",
-                                "latency",
-                            }
-                        ),
+                        **stream_payload(agent_thought, agent_thoughts),
                         "id": event_id,
                         "end_user_id": end_user_id,
                         "conversation_id": conversation_id,
@@ -257,7 +230,11 @@ class OpenApiService(BaseService):
                 "conversation_id": str(conversation.id),
                 "query": req.query.data,
                 "answer": agent_result.answer,
-                "total_token_count": 0,
+                "total_token_count": agent_result.total_token_count,
+                "message_token_count": agent_result.message_token_count,
+                "answer_token_count": agent_result.answer_token_count,
+                "total_price": agent_result.usage.get("total_price"),
+                "usage": agent_result.usage,
                 "latency": agent_result.latency,
                 "agent_thoughts": [
                     {
@@ -269,6 +246,7 @@ class OpenApiService(BaseService):
                         "tool_input": agent_thought.tool_input,
                         "latency": agent_thought.latency,
                         "created_at": 0,
+                        "usage": agent_thought.usage.model_dump(mode="json") if agent_thought.usage else None,
                     }
                     for agent_thought in agent_result.agent_thoughts
                 ],

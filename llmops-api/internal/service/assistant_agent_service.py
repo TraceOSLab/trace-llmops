@@ -16,6 +16,7 @@ from sqlalchemy import desc
 from internal.core.agent.agents.agent_queue_manager import AgentQueueManager
 from internal.core.agent.agents.function_call_agent import FunctionCallAgent
 from internal.core.agent.entities.agent_entity import AgentConfig
+from internal.core.agent.usage import merge_agent_thought, stream_payload
 from internal.core.agent.entities.queue_entity import QueueEvent
 from internal.core.language_model.language_model_manager import LanguageModelManager
 from internal.core.memory.token_buffer_memory import TokenBufferMemory
@@ -102,38 +103,9 @@ class AssistantAgentService(BaseService):
         ):
             event_id = str(agent_thought.id)
 
-            # 将数据填充到agent_thought
-            if agent_thought.event != QueueEvent.PING:
-                # 处理 agent_message 数据为叠加
-                if agent_thought.event == QueueEvent.AGENT_MESSAGE:
-                    if event_id not in agent_thoughts:
-                        agent_thoughts[event_id] = agent_thought
-                    else:
-                        # 叠加智能体消息
-                        agent_thoughts[event_id] = agent_thoughts[event_id].model_copy(
-                            update={
-                                "thought": agent_thoughts[event_id].thought
-                                + agent_thought.thought,
-                                "answer": agent_thoughts[event_id].answer
-                                + agent_thought.answer,
-                                "latency": agent_thought.latency,
-                            }
-                        )
-                else:
-                    # 处理其他类型事件的消息
-                    agent_thoughts[event_id] = agent_thought
+            merge_agent_thought(agent_thoughts, agent_thought)
             data = {
-                **agent_thought.model_dump(
-                    include={
-                        "event",
-                        "thought",
-                        "observation",
-                        "tool",
-                        "tool_input",
-                        "answer",
-                        "latency",
-                    }
-                ),
+                **stream_payload(agent_thought, agent_thoughts),
                 "id": event_id,
                 "conversation_id": str(conversation.id),
                 "message_id": str(message.id),
