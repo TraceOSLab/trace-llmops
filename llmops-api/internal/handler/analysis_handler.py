@@ -1,5 +1,10 @@
+from uuid import UUID
+
 from attr import dataclass
+from flask_login import current_user
 from injector import inject
+from internal.service import AnalysisService
+from pkg.response.response import success_json
 
 
 @inject
@@ -7,4 +12,9 @@ from injector import inject
 class AnalysisHander:
     """使用/费用统计分析"""
 
-    pass
+    analysis_service: AnalysisService
+
+    def get_app_analysis(self, app_id: UUID):
+        """根据传递的应用id获取应用的统计信息"""
+        app_analysis = self.analysis_service.get_app_analysis(app_id, current_user)
+        return success_json(app_analysis)

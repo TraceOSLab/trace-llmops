@@ -30,6 +30,7 @@ from internal.handler import (
     LanguageModelHandler,
     AssistantAgentHandler,
 )
+from internal.handler.analysis_handler import AnalysisHander
 
 
 @inject
@@ -54,6 +55,7 @@ class Router:
     workflow_handler: WorkflowHandler
     language_model_handler: LanguageModelHandler
     assistant_agent_handler: AssistantAgentHandler
+    analysis_handler: AnalysisHander
 
     def register_router(self, app: Flask):
         """注册路由"""
@@ -484,6 +486,12 @@ class Router:
             "/assistant-agent/delete-conversation",
             methods=["POST"],
             view_func=self.assistant_agent_handler.delete_assistant_agent_conversation,
+        )
+
+        # 应用统计模块
+        bp.add_url_rule(
+            "/analysis/<uuid:app_id>",
+            view_func=self.analysis_handler.get_app_analysis,
         )
 
         # 在应用上注册蓝图
