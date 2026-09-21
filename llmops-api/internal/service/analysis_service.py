@@ -147,7 +147,7 @@ class AnalysisService(BaseService):
             token_output_rate = (
                 sum(message.total_token_count for message in messages) / latency_sum
             )
- 
+
         # 5.计算费用消耗，使用总花费进行求和
         cost_consumption = sum(message.total_price for message in messages)
 

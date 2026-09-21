@@ -12,6 +12,7 @@ from jinja2 import Template
 from langchain_core.runnables import RunnableConfig
 
 from internal.core.language_model import get_language_model_manager
+from internal.exception import ValidateErrorException
 from internal.core.workflow.entities.node_entity import NodeResult, NodeStatus
 from internal.core.workflow.entities.workflow_entity import WorkflowState
 from internal.core.workflow.nodes import BaseNode
@@ -39,9 +40,14 @@ class LLMNode(BaseNode):
         prompt_value = template.render(**inputs_dict)
 
         # 根据节点中的完整模型配置创建对应 Provider 的模型
-        llm = get_language_model_manager().create_language_model(
-            self.node_data.language_model_config
-        )
+        try:
+            llm = get_language_model_manager().create_language_model(
+                self.node_data.language_model_config
+            )
+        except ValidateErrorException as exc:
+            raise ValidateErrorException(
+                f"工作流LLM节点[{self.node_data.title}]({self.node_data.id}): {exc.message}"
+            ) from exc
         content = ""
         for chunk in llm.stream(prompt_value):
             content += chunk.content

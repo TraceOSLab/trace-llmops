@@ -134,6 +134,15 @@ class OpenApiService(BaseService):
             )
             tools.append(dataset_retrieval)
 
+        # 是否关联工作流，如果关联了工作流则将工作流构建成工具添加到tools中
+        if app_config["workflows"]:
+            workflow_tools = (
+                self.app_config_service.get_langchain_tools_by_workflow_ids(
+                    [workflow["id"] for workflow in app_config["workflows"]]
+                )
+            )
+            tools.extend(workflow_tools)
+
         # 构建智能体
         agent = FunctionCallAgent(
             llm=llm,
@@ -246,7 +255,11 @@ class OpenApiService(BaseService):
                         "tool_input": agent_thought.tool_input,
                         "latency": agent_thought.latency,
                         "created_at": 0,
-                        "usage": agent_thought.usage.model_dump(mode="json") if agent_thought.usage else None,
+                        "usage": (
+                            agent_thought.usage.model_dump(mode="json")
+                            if agent_thought.usage
+                            else None
+                        ),
                     }
                     for agent_thought in agent_result.agent_thoughts
                 ],

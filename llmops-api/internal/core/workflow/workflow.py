@@ -5,6 +5,7 @@
 @Time   :   2026/3/2
 @Author :   s.qiu@foxmail.com
 """
+
 from typing import Any, Optional, Iterator
 
 from flask import current_app
@@ -18,8 +19,16 @@ from internal.exception import ValidateErrorException
 from .entities.node_entity import NodeType
 from .entities.variable_entity import VARIABLE_TYPE_MAP
 from .entities.workflow_entity import WorkflowConfig, WorkflowState
-from .nodes import StartNode, EndNode, DatasetRetrievalNode, LLMNode, TemplateTransformNode, CodeNode, ToolNode, \
-    HttpRequestNode
+from .nodes import (
+    StartNode,
+    EndNode,
+    DatasetRetrievalNode,
+    LLMNode,
+    TemplateTransformNode,
+    CodeNode,
+    ToolNode,
+    HttpRequestNode,
+)
 
 NodeClasses = {
     NodeType.START: StartNode,
@@ -35,6 +44,7 @@ NodeClasses = {
 
 class Workflow(BaseTool):
     """工作流 Langchain 工具类"""
+
     _workflow_config: WorkflowConfig = PrivateAttr(None)
     _workflow: CompiledStateGraph = PrivateAttr(None)
 
@@ -44,7 +54,8 @@ class Workflow(BaseTool):
             name=workflow_config.name,
             description=workflow_config.description,
             args_schema=self._build_args_schema(workflow_config),
-            **kwargs)
+            **kwargs,
+        )
 
         self._workflow_config = workflow_config
         self._workflow = self._build_workflow()
@@ -53,8 +64,12 @@ class Workflow(BaseTool):
     def _build_args_schema(cls, workflow_config: WorkflowConfig) -> type[BaseModel]:
         fields = {}
         inputs = next(
-            (node.inputs for node in workflow_config.nodes if node.node_type == NodeType.START),
-            []
+            (
+                node.inputs
+                for node in workflow_config.nodes
+                if node.node_type == NodeType.START
+            ),
+            [],
         )
 
         for input in inputs:
@@ -66,7 +81,10 @@ class Workflow(BaseTool):
             if field_required:
                 fields[field_name] = (field_type, Field(description=field_description))
             else:
-                fields[field_name] = (Optional[field_type], Field(default=None, description=field_description))
+                fields[field_name] = (
+                    Optional[field_type],
+                    Field(default=None, description=field_description),
+                )
 
         return create_model("DynamicModel", **fields)
 
@@ -82,12 +100,18 @@ class Workflow(BaseTool):
             node_flag = f"{node.node_type}_{node.id}"
             if node.node_type in NodeClasses.keys():
                 if node.node_type == NodeType.DATASET_RETRIEVAL:
-                    graph.add_node(node_flag, NodeClasses[node.node_type](
-                        flask_app=current_app._get_current_object(),
-                        account_id=self._workflow_config.account_id,
-                        node_data=node))
+                    graph.add_node(
+                        node_flag,
+                        NodeClasses[node.node_type](
+                            flask_app=current_app._get_current_object(),
+                            account_id=self._workflow_config.account_id,
+                            node_data=node,
+                        ),
+                    )
                 else:
-                    graph.add_node(node_flag, NodeClasses[node.node_type](node_data=node))
+                    graph.add_node(
+                        node_flag, NodeClasses[node.node_type](node_data=node)
+                    )
             else:
                 raise ValidateErrorException("工作流节点类型不存在！")
 
@@ -125,13 +149,14 @@ class Workflow(BaseTool):
 
     def _run(self, *args: Any, **kwargs: Any) -> Any:
         """工作流基础 Run 方法"""
-        return self._workflow.invoke({"inputs": kwargs})
+        result = self._workflow.invoke({"inputs": kwargs})
+        return result.get("outputs", {})
 
     def stream(
-            self,
-            input: Input,
-            config: Optional[RunnableConfig] = None,
-            **kwargs: Optional[Any],
+        self,
+        input: Input,
+        config: Optional[RunnableConfig] = None,
+        **kwargs: Optional[Any],
     ) -> Iterator[Output]:
         """工作流流式输出每个节点对应的结果"""
         return self._workflow.stream({"inputs": input})

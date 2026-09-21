@@ -136,7 +136,9 @@ class Provider(BaseModel):
         """根据模型名称获取模型实体"""
         model_entity = self.model_entity_map.get(model_name, None)
         if model_entity is None:
-            raise NotFoundException("该模型实体不存在")
+            raise NotFoundException(
+                f"提供商[{self.name}]下不存在模型[{model_name}]，请检查模型目录与模型配置"
+            )
         return model_entity
 
     def get_model_entities(self) -> list[ModelEntity]:

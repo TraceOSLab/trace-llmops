@@ -169,7 +169,6 @@ class LanguageModelManager(BaseModel):
         provider = self.get_provider(config.provider)
         model_entity = provider.get_model_entity(config.model)
         model_class = provider.get_model_class(ModelType.CHAT)
-
         init_kwargs = {
             **model_entity.attributes,
             **config.parameters,

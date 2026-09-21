@@ -41,6 +41,7 @@ from internal.entity.app_entity import (
 )
 from internal.entity.conversation_entity import InvokeFrom, MessageStatus
 from internal.entity.dataset_entity import RetrievalSource
+from internal.entity.workflow_entity import WorkflowStatus
 from internal.exception import (
     NotFoundException,
     ForbiddenException,
@@ -58,6 +59,7 @@ from internal.model import (
     AppDatasetJoin,
     Message,
 )
+from internal.model.workflow import Workflow
 from internal.schema.app_schema import (
     CreateAppReq,
     GetPublishHistoriesWithPageReq,
@@ -288,6 +290,7 @@ class AppService(BaseService):
         app = self.get_app(app_id, account)
         # 校验传递的草稿配置
         draft_app_config = self._validate_draft_app_config(draft_app_config, account)
+
         draft_app_config_record = app.draft_app_config
         # todo:6 字段手动传递
         self.update(
@@ -315,8 +318,7 @@ class AppService(BaseService):
             text_to_speech=draft_app_config["text_to_speech"],
             suggested_after_answer=draft_app_config["suggested_after_answer"],
             review_config=draft_app_config["review_config"],
-            # todo:5 等待工作流模块完成
-            workflows=draft_app_config["workflows"],
+            workflows=[workflow["id"] for workflow in draft_app_config["workflows"]],
             tools=[
                 {
                     "type": tool["type"],
@@ -555,6 +557,15 @@ class AppService(BaseService):
             )
             tools.append(dataset_retrieval)
 
+        # 检测是否关联工作流，如果关联了工作流则将工作流构建成工具添加到tools中
+        if draft_app_config["workflows"]:
+            workflow_tools = (
+                self.app_config_service.get_langchain_tools_by_workflow_ids(
+                    [workflow["id"] for workflow in draft_app_config["workflows"]]
+                )
+            )
+            tools.extend(workflow_tools)
+
         # 构建 AGENT 智能体 使用 FUNCTIONCALLAGENT
         agent = FunctionCallAgent(
             llm=llm,
@@ -788,9 +799,32 @@ class AppService(BaseService):
             # 6.11 重新赋值工具
             draft_app_config["tools"] = validate_tools
 
-        # todo:7.校验workflows，等待工作流模块完成后实现
         if "workflows" in draft_app_config:
-            draft_app_config["workflows"] = []
+            workflows = draft_app_config["workflows"]
+            # 7.1 关联的工作流不能超过5个
+            if not isinstance(workflows, list):
+                raise ValidateErrorException("工作流列表格式错误")
+            if len(workflows) > 5:
+                raise ValidateErrorException("应用下最多可以绑定5个工作流")
+            # 7.2 判断是否有重复工作流
+            if len(set(workflows)) != len(workflows):
+                raise ValidateErrorException("绑定工作流存在重复")
+            # 7.3 获取当前账号限工作流
+            workflow_records = (
+                self.db.session.query(Workflow)
+                .filter(
+                    Workflow.id.in_(workflows),
+                    Workflow.account_id == account.id,
+                    Workflow.status == WorkflowStatus.PUBLISHED,
+                )
+                .all()
+            )
+            workflow_sets = set(
+                [str(workflow_record.id) for workflow_record in workflow_records]
+            )
+            draft_app_config["workflows"] = [
+                workflow_id for workflow_id in workflows if workflow_id in workflow_sets
+            ]
 
         # 8.校验datasets知识库列表
         if "datasets" in draft_app_config:
