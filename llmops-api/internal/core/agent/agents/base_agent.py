@@ -6,6 +6,7 @@
 @Author :   s.qiu@foxmail.com
 """
 
+import logging
 import uuid
 from abc import abstractmethod
 from threading import Thread
@@ -107,8 +108,19 @@ class BaseAgent(Serializable, Runnable):
         input["history"] = input.get("history", [])
         input["iteration_count"] = input.get("iteration_count", 0)
 
-        # 创建子线程执行
-        thread = Thread(target=self._agent.invoke, args=(input,))
+        # 在线程启动前建立共享队列；后台任意节点失败都必须通知消费者。
+        self._agent_queue_manager.queue(input["task_id"])
+
+        def run_agent():
+            try:
+                self._agent.invoke(input)
+            except Exception as exc:
+                logging.exception("智能体执行失败")
+                self._agent_queue_manager.publish_error(input["task_id"], str(exc))
+            finally:
+                self._agent_queue_manager.stop_listen(input["task_id"])
+
+        thread = Thread(target=run_agent)
         thread.start()
 
         yield from self._agent_queue_manager.listen(input["task_id"])

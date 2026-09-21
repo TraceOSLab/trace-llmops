@@ -16,7 +16,8 @@ from internal.entity.conversation_entity import InvokeFrom
 
 
 @pytest.mark.parametrize("entry,stream", [("debug", True), ("public", True), ("public", False)])
-def test_services_return_and_save_consistent_usage(monkeypatch, entry, stream):
+@pytest.mark.parametrize("terminal", [QueueEvent.AGENT_END, QueueEvent.ERROR])
+def test_services_return_and_save_consistent_usage(monkeypatch, entry, stream, terminal):
     module = importlib.import_module("internal.service.app_service" if entry == "debug"
                                      else "internal.service.openapi_service")
     usage = TokenUsage(source="provider", complete=True, input_tokens=100, output_tokens=20,
@@ -27,7 +28,8 @@ def test_services_return_and_save_consistent_usage(monkeypatch, entry, stream):
         AgentThought(id=step_id, task_id=task_id, event=QueueEvent.AGENT_MESSAGE, answer="答案"),
         AgentThought(id=step_id, task_id=task_id, event=QueueEvent.AGENT_MESSAGE,
                      usage=usage, **usage.legacy_fields()),
-        AgentThought(id=uuid4(), task_id=task_id, event=QueueEvent.AGENT_END),
+        AgentThought(id=uuid4(), task_id=task_id, event=terminal,
+                     observation="Prompt exceeds max length" if terminal == QueueEvent.ERROR else ""),
     ]
     merged = {}
     for event in events:
@@ -58,7 +60,7 @@ def test_services_return_and_save_consistent_usage(monkeypatch, entry, stream):
     message = SimpleNamespace(id=uuid4())
     app = SimpleNamespace(id=app_id, status=AppStatus.PUBLISHED, debug_conversation=conversation)
     config = {"model_config": {"provider": "zhipu", "model": "glm-5.2"},
-              "dialog_round": 3, "tools": [], "datasets": [],
+              "dialog_round": 3, "tools": [], "datasets": [], "workflows": [],
               "long_term_memory": {"enable": False}, "preset_prompt": "", "review_config": {}}
     service = SimpleNamespace(
         db=MagicMock(), get_app=lambda *_args: app, get_draft_app_config=lambda *_args: config,
@@ -80,7 +82,9 @@ def test_services_return_and_save_consistent_usage(monkeypatch, entry, stream):
         if stream:
             frames = list(response)
             payloads = [json.loads(frame.split("data:", 1)[1]) for frame in frames]
-            assert frames[-1].startswith("event: agent_end\n")
+            assert frames[-1].startswith(f"event: {terminal.value}\n")
+            if terminal == QueueEvent.ERROR:
+                assert payloads[-1]["observation"] == "Prompt exceeds max length"
             assert "".join(data["answer"] for data in payloads) == "答案"
             assert payloads[0]["total_price"] is None
             assert payloads[1]["usage"]["source"] == "provider"
@@ -89,8 +93,12 @@ def test_services_return_and_save_consistent_usage(monkeypatch, entry, stream):
             data = response.data
     assert data["total_token_count"] == 120
     assert data["usage"]["input_tokens"] == 100
-    assert Decimal(data["total_price"]) == Decimal("0.00036")
-    assert data["usage"]["complete"] is True
+    if terminal == QueueEvent.ERROR:
+        assert data["total_price"] is None
+        assert data["usage"]["known_costs"] == {"CNY": "0.00036"}
+    else:
+        assert Decimal(data["total_price"]) == Decimal("0.00036")
+    assert data["usage"]["complete"] is (terminal == QueueEvent.AGENT_END)
     saved = next(event for event in saves[0]["agent_thoughts"] if event.id == step_id)
     assert saved.answer == "答案"
     assert saved.usage == usage

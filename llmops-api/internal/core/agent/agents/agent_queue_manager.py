@@ -9,12 +9,15 @@ import queue
 import time
 import uuid
 from queue import Queue
+from threading import RLock
 from typing import Generator
 
 from redis import Redis
 
 from internal.core.agent.entities.queue_entity import AgentThought, QueueEvent
 from internal.entity.conversation_entity import InvokeFrom
+
+TERMINAL_EVENTS = {QueueEvent.STOP, QueueEvent.ERROR, QueueEvent.TIMEOUT, QueueEvent.AGENT_END}
 
 
 class AgentQueueManager:
@@ -29,6 +32,8 @@ class AgentQueueManager:
         self.user_id = user_id
         self.invoke_from = invoke_from
         self._queues = {}
+        self._lock = RLock()
+        self._closed_tasks: set[str] = set()
 
         # 内部初始化 redis_client
         from app.http.module import injector
@@ -36,11 +41,12 @@ class AgentQueueManager:
 
     def publish(self, task_id: uuid.UUID, agent_thought: AgentThought) -> None:
         """发布事件到队列"""
-        self.queue(task_id).put(agent_thought)
-
-        # 判断是否为需要停止监听的事件类型
-        if agent_thought.event in [QueueEvent.STOP, QueueEvent.ERROR, QueueEvent.TIMEOUT, QueueEvent.AGENT_END]:
-            self.stop_listen(task_id)
+        with self._lock:
+            if str(task_id) in self._closed_tasks:
+                return
+            self.queue(task_id).put(agent_thought)
+            if agent_thought.event in TERMINAL_EVENTS:
+                self.stop_listen(task_id)
 
     def publish_error(self, task_id: uuid.UUID, error) -> None:
         self.publish(task_id, AgentThought(
@@ -61,10 +67,18 @@ class AgentQueueManager:
 
     def stop_listen(self, task_id: uuid.UUID) -> None:
         """停止监听队列"""
-        self.queue(task_id).put(None)
+        with self._lock:
+            if str(task_id) not in self._closed_tasks:
+                self.queue(task_id).put(None)
+                self._closed_tasks.add(str(task_id))
 
     def queue(self, task_id: uuid.UUID) -> Queue:
         """获取对应的任务队列信息"""
+        with self._lock:
+            return self._get_or_create_queue(task_id)
+
+    def _get_or_create_queue(self, task_id: uuid.UUID) -> Queue:
+        """调用方持锁，避免生产者和消费者首次访问时创建不同队列。"""
         q = self._queues.get(str(task_id))
         # 如果队列中不存在 创建队列并添加缓存键
         if not q:
@@ -81,34 +95,35 @@ class AgentQueueManager:
         """监听队列"""
         # 记录超时时间、开始时间、最后一次PING通时间
         listen_timeout = 600
-        start_time = time.time()
+        start_time = time.monotonic()
         last_ping_time = 0
+        task_queue = self.queue(task_id)
 
         # 监听队列是否存在
         while True:
             try:
-                item = self.queue(task_id).get(timeout=1)
+                item = task_queue.get(timeout=1)
                 if item is None:
-                    break
+                    return
                 yield item
+                if item.event in TERMINAL_EVENTS:
+                    return
             except queue.Empty:
+                pass
+
+            # 终止事件已经入队时，优先取出，避免再访问 Redis。
+            with self._lock:
+                closed = str(task_id) in self._closed_tasks
+            if closed:
                 continue
-            finally:
-                # 获取数据总耗时
-                elapsed_time = time.time() - start_time
-
-                # 每十秒发送一次PING事件 保持心跳
-                if elapsed_time // 10 > last_ping_time:
-                    self.publish(task_id, AgentThought(id=uuid.uuid4(), task_id=task_id, event=QueueEvent.PING))
-                    last_ping_time = elapsed_time // 10
-
-                # 是否超时 添加超时事件
-                if elapsed_time >= listen_timeout:
-                    self.publish(task_id, AgentThought(id=uuid.uuid4(), task_id=task_id, event=QueueEvent.TIMEOUT))
-
-                # 是否停止 添加停止时间
-                if self._is_stopped(task_id):
-                    self.publish(task_id, AgentThought(id=uuid.uuid4(), task_id=task_id, event=QueueEvent.STOP))
+            elapsed_time = time.monotonic() - start_time
+            if elapsed_time >= listen_timeout:
+                self.publish(task_id, AgentThought(id=uuid.uuid4(), task_id=task_id, event=QueueEvent.TIMEOUT))
+            elif self._is_stopped(task_id):
+                self.publish(task_id, AgentThought(id=uuid.uuid4(), task_id=task_id, event=QueueEvent.STOP))
+            elif elapsed_time // 10 > last_ping_time:
+                self.publish(task_id, AgentThought(id=uuid.uuid4(), task_id=task_id, event=QueueEvent.PING))
+                last_ping_time = elapsed_time // 10
 
     @classmethod
     def set_stop_flag(cls, task_id: uuid.UUID, invoke_from: InvokeFrom, user_id: uuid.UUID) -> None:
