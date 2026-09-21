@@ -42,7 +42,11 @@ data: {"event":"agent_message","id":"...","conversation_id":"...","message_id":"
 | `timeout` | 服务端超时终止。 | 无 |
 | `error` | 异常终止。 | `observation` |
 
-设计目标是一个任务只发送一个终止事件，并且终止后不再发送 Frame。当前 `AgentQueueManager.listen()` 的心跳、超时和停止检查位于 `finally` 中，这一不变量尚无契约测试保证；修改前应先补测试，不要直接假设其行为正确。
+一个任务只发送一个终止事件，并且终止后不再发送 Frame。`AgentQueueManager` 对队列创建及终止状态加锁，拒绝重复终止和终止后的事件；`listen()` 发出终止事件后直接返回，不再进行 Redis 停止检查或发送心跳。后台 Agent 统一捕获未处理异常并发布现有 `error` 事件，执行退出时关闭队列，避免响应等待已退出的生产线程。
+
+这一路径由公开 API、应用调试及辅助智能体共享，不改变事件名或字段。模型返回 HTTP 400（例如 `Prompt exceeds max length`）时，已开始的 SSE 响应通过 `error.observation` 表达失败并结束响应体，不会将已发送的 HTTP 200 改为 400。该处理不自动截断提示词，也不保证取消已经发出的模型请求。调试器暂停进程期间，响应仍需等待恢复执行。
+
+离线回归覆盖真实 LangGraph 后台线程中的模拟模型 400、未处理节点异常、正常/错误/停止/超时终止、重复终止、队列并发初始化，以及 Service 的 SSE 序列化和保存参数。测试使用 Fake Redis 和模型，不访问外部服务。
 
 ## 其他流式事件
 
