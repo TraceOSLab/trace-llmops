@@ -84,4 +84,6 @@ class Http(Flask):
 
         # 生产环境返回 FAIL
         else:
-            return fail_message(error.__str__())
+            # 不把数据库语句、连接信息或上游异常中的凭证回传客户端。
+            self.logger.error("Unhandled request error: %s", type(error).__name__)
+            return fail_message("服务暂时不可用，请稍后重试")

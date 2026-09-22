@@ -45,7 +45,7 @@ def test_document_routes_persist_and_query(
     dataset, upload = dataset_and_upload
     document_handler = handler_for("create_documents")
     document_service = document_handler.document_service
-    document_service.redis_client = MagicMock()
+    monkeypatch.setattr(document_service, 'redis_client', MagicMock())
     document_service.redis_client.get.return_value = None
     monkeypatch.setattr(document_service_module.build_documents, "delay", MagicMock())
     monkeypatch.setattr(document_service_module.update_document_enabled, "delay", MagicMock())
@@ -110,7 +110,7 @@ def test_document_routes_persist_and_query(
 
 
 def test_segment_routes_persist_and_query(
-    client, db_session, dataset_and_upload, handler_for
+    client, db_session, dataset_and_upload, handler_for, monkeypatch
 ):
     from internal.entity.dataset_entity import DocumentStatus, SegmentStatus
     from internal.model import Document, ProcessRule, Segment
@@ -135,14 +135,14 @@ def test_segment_routes_persist_and_query(
     db_session.flush()
 
     segment_service = handler_for("create_segment").segment_service
-    segment_service.embeddings_service = MagicMock()
+    monkeypatch.setattr(segment_service, 'embeddings_service', MagicMock())
     segment_service.embeddings_service.calculate_token_count.side_effect = lambda value: len(value)
     segment_service.embeddings_service.embeddings.embed_query.return_value = [0.1]
-    segment_service.jieba_service = MagicMock()
+    monkeypatch.setattr(segment_service, 'jieba_service', MagicMock())
     segment_service.jieba_service.extract_keywords.return_value = ["keyword"]
-    segment_service.vector_database_service = MagicMock()
-    segment_service.keyword_table_service = MagicMock()
-    segment_service.redis_client = MagicMock()
+    monkeypatch.setattr(segment_service, 'vector_database_service', MagicMock())
+    monkeypatch.setattr(segment_service, 'keyword_table_service', MagicMock())
+    monkeypatch.setattr(segment_service, 'redis_client', MagicMock())
     segment_service.redis_client.get.return_value = None
 
     assert_success(

@@ -34,6 +34,8 @@ class Middleware:
             payload = self.jwt_service.parse_token(access_token)
             account_id = payload.get("sub")
             account = self.account_service.get_account(account_id)
+            if account is None:
+                raise UnauthorizedException("账号不存在，请重新登录")
             return account
         elif request.blueprint == "openapi":
             # 校验 api_key
@@ -41,7 +43,10 @@ class Middleware:
             api_key_record = self.api_key_service.get_api_by_by_credential(api_key)
             if not api_key_record or not api_key_record.is_active:
                 raise UnauthorizedException("API密钥不存在或未启用")
-            return api_key_record.account
+            account = api_key_record.account
+            if account is None:
+                raise UnauthorizedException("API密钥所属账号不存在")
+            return account
         else:
             return None
 
@@ -53,11 +58,12 @@ class Middleware:
         if not auth_header:
             raise UnauthorizedException("缺少TOKEN，请登录后重试")
         # 没有空格分隔符 Authorization: Bearer access_token
-        if " " not in auth_header:
+        parts = auth_header.split()
+        if len(parts) != 2:
             raise UnauthorizedException("TOKEN格式错误，请登录后重试")
 
         # 按空格分隔 必须符合 Bearer access_token
-        auth_schema, credential = auth_header.split(None, 1)
+        auth_schema, credential = parts
         if auth_schema.lower() != "bearer":
             raise UnauthorizedException("无权限访问，请登录后重试")
 

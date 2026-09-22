@@ -129,11 +129,11 @@ def test_app_debug_stream_stop_and_ping_routes(
     monkeypatch.setattr(app_handler_module, "StateGraph", lambda *args: EmptyGraph())
     app_handler = handler_for("debug")
     fake_tool = lambda: MagicMock()
-    app_handler.builtin_provider_manager = MagicMock()
+    monkeypatch.setattr(app_handler, 'builtin_provider_manager', MagicMock())
     app_handler.builtin_provider_manager.get_tool.return_value = fake_tool
     fake_llm = MagicMock(features=[], metadata={})
     fake_llm.invoke.return_value.content = "ok"
-    app_handler.language_model_manager = MagicMock()
+    monkeypatch.setattr(app_handler, 'language_model_manager', MagicMock())
     app_handler.language_model_manager.create_default_language_model.return_value = (
         fake_llm
     )
@@ -144,16 +144,16 @@ def test_app_debug_stream_stop_and_ping_routes(
     assert debug_response.status_code == 200
     assert debug_response.mimetype == "text/event-stream"
 
-    app_handler.app_service.debug_chat = MagicMock(
+    monkeypatch.setattr(app_handler.app_service, 'debug_chat', MagicMock(
         return_value=iter(["event: done\ndata: {}\n\n"])
-    )
+    ))
     chat_response = client.post(
         f"/apps/{app_record.id}/conversations", json={"query": "hello"}
     )
     assert chat_response.mimetype == "text/event-stream"
     assert b"event: done" in chat_response.get_data()
 
-    app_handler.app_service.stop_debug_chat = MagicMock()
+    monkeypatch.setattr(app_handler.app_service, 'stop_debug_chat', MagicMock())
     assert_success(
         client.post(
             f"/apps/{app_record.id}/conversations/tasks/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/stop"

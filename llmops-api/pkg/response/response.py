@@ -40,11 +40,9 @@ def fail_json(data: Any = None):
 
 def validate_error_json(errors: dict = None):
     """数据验证错误响应"""
-    first_key = next(iter(errors))
-    if first_key is not None:
-        msg = errors.get(first_key)[0]
-    else:
-        msg = ""
+    errors = errors or {}
+    first_errors = next(iter(errors.values()), [])
+    msg = first_errors[0] if first_errors else ""
     return json(Response(code=HttpCode.VALIDATE_ERROR, message=msg, data=errors))
 
 

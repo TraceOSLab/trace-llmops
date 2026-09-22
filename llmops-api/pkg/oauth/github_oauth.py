@@ -65,19 +65,24 @@ class GithubOAuth(OAuth):
         email_resp.raise_for_status()
         email_info = email_resp.json()
 
-        primary_email = next((email for email in email_info if email.get("primary", None)), None)
-        return {**raw_info, "email": primary_email.get("email", None)}
+        primary_email = next((email for email in email_info
+                              if email.get("primary") is True
+                              and email.get("verified") is True
+                              and email.get("email")), None)
+        if primary_email is None:
+            raise ValueError("Github OAuth 需要已验证的主邮箱")
+        return {**raw_info, "email": primary_email["email"]}
 
     def transform_user_info(self, raw_info: dict) -> OAuthUserInfo:
         """将OAuth原始信息转换成OAuthUserInfo"""
 
-        # 获取邮箱 不存在创建一个默认邮箱
+        # 邮箱参与本地账号关联，不为缺失身份生成伪造邮箱。
         email = raw_info.get("email")
-        if not email:
-            email = f"{raw_info.get('id')}+{raw_info.get('login')}@user.no-reply@github.com"
+        if not raw_info.get("id") or not email:
+            raise ValueError("Github OAuth 身份信息不完整")
 
         return OAuthUserInfo(
             id=str(raw_info.get("id")),
-            name=str(raw_info.get("name")),
+            name=str(raw_info.get("name") or raw_info.get("login") or raw_info["id"]),
             email=str(email),
         )

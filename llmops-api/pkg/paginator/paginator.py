@@ -11,7 +11,7 @@ from typing import Any
 import math
 from flask_wtf import FlaskForm
 from wtforms import IntegerField
-from wtforms.validators import Optional, NumberRange
+from wtforms.validators import NumberRange
 
 from pkg.sqlalchemy import SQLAlchemy
 
@@ -19,11 +19,9 @@ from pkg.sqlalchemy import SQLAlchemy
 class PaginatorReq(FlaskForm):
     """分页请求基础类，涵盖当前页数、每页条数，如果接口请求需要携带分页信息，可直接继承该类"""
     current_page = IntegerField("current_page", default=1, validators=[
-        Optional(),
         NumberRange(min=1, max=9999, message="当前页数的范围在1-9999")
     ])
     page_size = IntegerField("page_size", default=20, validators=[
-        Optional(),
         NumberRange(min=1, max=50, message="每页数据的条数范围在1-50")
     ])
 

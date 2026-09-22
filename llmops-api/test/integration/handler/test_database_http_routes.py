@@ -223,7 +223,7 @@ def test_api_tool_crud_routes_persist_and_query(client, account, db_session):
 
 
 def test_dataset_crud_routes_persist_and_query(
-    client, account, db_session, handler_for
+    client, account, db_session, handler_for, monkeypatch
 ):
     from internal.model import Dataset
 
@@ -250,7 +250,7 @@ def test_dataset_crud_routes_persist_and_query(
     assert queries["data"] == []
 
     dataset_handler = handler_for("delete_dataset")
-    dataset_handler.dataset_service.indexing_service.delete_dataset = lambda *args: None
+    monkeypatch.setattr(dataset_handler.dataset_service.indexing_service, 'delete_dataset', lambda *args: None)
     assert_success(client.post(f"/datasets/{dataset_id}/delete"))
     db_session.expire_all()
     assert db_session.get(Dataset, dataset_id) is None

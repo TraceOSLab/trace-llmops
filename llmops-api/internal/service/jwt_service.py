@@ -9,6 +9,7 @@
 import os
 from dataclasses import dataclass
 from typing import Any
+from uuid import UUID
 
 import jwt
 from injector import inject
@@ -32,10 +33,15 @@ class JWTService:
         """根据 token 解析 payload"""
         secret_key = os.getenv("JWT_SECRET_KEY")
         try:
-            return jwt.decode(token, secret_key, algorithms=["HS256"])
+            payload = jwt.decode(
+                token, secret_key, algorithms=["HS256"], issuer="llmops",
+                options={"require": ["sub", "iss", "exp"]},
+            )
+            UUID(payload["sub"])
+            return payload
         except jwt.ExpiredSignatureError:
             raise UnauthorizedException("授权凭证已过期，请重新登录")
         except jwt.InvalidTokenError:
             raise UnauthorizedException("token解析错误，请重新登录")
-        except Exception as e:
-            raise UnauthorizedException(str(e))
+        except Exception:
+            raise UnauthorizedException("token解析错误，请重新登录") from None

@@ -137,6 +137,7 @@ class AppHandler:
         self.app_service.cancel_publish_app_config(app_id, current_user)
         return success_message("取消发布应用成功")
 
+    @login_required
     def fallback_history_to_draft(self, app_id: UUID):
         """应用回退指定配置版本到当前草稿"""
         req = FallbackHistoryToDraftReq()
@@ -150,6 +151,8 @@ class AppHandler:
     @login_required
     def get_publish_histories_with_page(self, app_id: UUID):
         req = GetPublishHistoriesWithPageReq(request.args)
+        if not req.validate():
+            return validate_error_json(req.errors)
         app_config_versions, paginator = (
             self.app_service.get_publish_histories_with_page(app_id, req, current_user)
         )

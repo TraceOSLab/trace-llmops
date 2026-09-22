@@ -48,6 +48,12 @@ def app():
     flask_app = create_app()
     flask_app.config.update(TESTING=True, WTF_CSRF_ENABLED=False)
 
+    @flask_app.before_request
+    def _reset_request_identity():
+        # db_session 保留 app_context；不能让 Flask-Login 的 g 缓存跨测试请求复用。
+        from flask import g
+        g.pop("_login_user", None)
+
     from internal.extension.database_extension import db
 
     with flask_app.app_context():
@@ -62,20 +68,20 @@ def require_all_routes_to_be_exercised(app):
     from flask import request
 
     expected = {
-        rule.endpoint
+        (rule.endpoint, method)
         for rule in app.url_map.iter_rules()
         if rule.endpoint != "static"
+        for method in rule.methods - {"HEAD", "OPTIONS"}
     }
     visited = set()
 
     @app.before_request
     def _record_endpoint():
         if request.endpoint:
-            visited.add(request.endpoint)
+            visited.add((request.endpoint, request.method))
 
     yield
     missing = sorted(expected - visited)
-    assert len(expected) == 85
     assert not missing, f"以下 Handler 路由未被 HTTP 集成测试执行: {missing}"
 
 

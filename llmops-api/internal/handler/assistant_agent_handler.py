@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from flask import request
 
 from flask_login import current_user, login_required
 from injector import inject
@@ -49,7 +50,7 @@ class AssistantAgentHandler:
     def get_assistant_agent_messages_with_page(self):
         """辅助智能体会话消息分页列表"""
 
-        req = GetAssistantAgentMessagesWithPageReq()
+        req = GetAssistantAgentMessagesWithPageReq(request.args)
         if not req.validate():
             return validate_error_json(req.errors)
 

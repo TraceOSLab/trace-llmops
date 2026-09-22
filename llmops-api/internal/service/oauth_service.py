@@ -13,13 +13,13 @@ from typing import Any
 from flask import request
 from injector import inject
 
-from internal.exception import NotFoundException
+from internal.exception import NotFoundException, UnauthorizedException
 from pkg.oauth import OAuth, GithubOAuth
 from pkg.sqlalchemy import SQLAlchemy
 from . import AccountService
 from .base_service import BaseService
 from .jwt_service import JWTService
-from ..model import AccountOAuth
+from ..model import Account, AccountOAuth
 
 
 @inject
@@ -60,33 +60,31 @@ class OAuthService(BaseService):
         oauth_access_token = oauth.get_access_token(code)
         oauth_user_info = oauth.get_user_info(oauth_access_token)  # id/name/email
 
-        # 获取授权记录
-        account_oauth = self.account_service.get_account_oauth_by_provider_name_and_openid(
-            provider_name,
-            oauth_user_info.id,
-        )
+        # 外部请求在事务前完成；账号、绑定、登录状态和凭证生成作为一次操作。
+        with self.db.auto_commit():
+            account_oauth = self.account_service.get_account_oauth_by_provider_name_and_openid(
+                provider_name, oauth_user_info.id,
+            )
+            if account_oauth is None:
+                account = self.account_service.get_account_by_email(oauth_user_info.email)
+                if account is None:
+                    account = Account(name=oauth_user_info.name, email=oauth_user_info.email)
+                    self.db.session.add(account)
+                    self.db.session.flush()
+                account_oauth = AccountOAuth(
+                    account_id=account.id, provider=provider_name,
+                    openid=oauth_user_info.id, encrypted_token=oauth_access_token,
+                )
+                self.db.session.add(account_oauth)
+            else:
+                account = self.account_service.get_account(account_oauth.account_id)
+                if account is None:
+                    raise UnauthorizedException("授权绑定的账号不存在")
 
-        # 如果是第一次授权 检查是否存在该账号 不存在则注册
-        if not account_oauth:
-            account = self.account_service.get_account_by_email(oauth_user_info.email)
-            if not account:
-                account = self.account_service.create_account(name=oauth_user_info.name, email=oauth_user_info.email)
-            # 添加授权认证的记录
-            account_oauth = self.create(AccountOAuth, account_id=account.id,
-                                        provider=provider_name,
-                                        openid=oauth_user_info.id,
-                                        encrypted_token=oauth_access_token)
-        # 有记录 查找账号信息
-        else:
-            account = self.account_service.get_account(account_oauth.account_id)
-
-        # 更新账号 最后登陆时间以及IP
-        self.update(account, last_login_at=datetime.now(), last_login_ip=request.remote_addr)
-        self.update(account_oauth, encrypted_token=oauth_access_token)
-
-        # 生成授权凭证
-        expire_at = int((datetime.now() + timedelta(days=5)).timestamp())
-        payload = {"sub": str(account.id), "iss": "llmops", "exp": expire_at}
-
-        access_token = self.jwt_service.generate_token(payload)
+            account.last_login_at = datetime.now()
+            account.last_login_ip = request.remote_addr
+            account_oauth.encrypted_token = oauth_access_token
+            expire_at = int((datetime.now() + timedelta(days=5)).timestamp())
+            payload = {"sub": str(account.id), "iss": "llmops", "exp": expire_at}
+            access_token = self.jwt_service.generate_token(payload)
         return {"expire_at": expire_at, "access_token": access_token}
