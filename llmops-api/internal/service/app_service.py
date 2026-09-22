@@ -7,6 +7,7 @@
 """
 
 import json
+import string
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -20,7 +21,7 @@ from langchain_classic.schema import StrOutputParser
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableParallel
 from redis import Redis
-from sqlalchemy import func, desc
+from sqlalchemy import Uuid, func, desc
 
 from internal.core.agent.agents import FunctionCallAgent, AgentQueueManager
 from internal.core.agent.entities import AgentConfig
@@ -48,7 +49,7 @@ from internal.exception import (
     ValidateErrorException,
     FailException,
 )
-from internal.lib.helper import get_value_type, remove_fields
+from internal.lib.helper import generate_random_string, get_value_type, remove_fields
 from internal.model import (
     App,
     Account,
@@ -616,6 +617,26 @@ class AppService(BaseService):
             },
         )
         thread.start()
+
+    def get_published_config(self, app_id: UUID, account: Account) -> dict[str, Any]:
+        """获取应用发布配置信息"""
+        app = self.get_app(app_id, account)
+
+        return {
+            "web_app": {
+                "token": app.token_with_default,
+                "status": app.status,
+            }
+        }
+
+    def regenerate_web_app_token(self, app_id: UUID, account: Account) -> string:
+        """重新生成 webapp token 凭证信息/重新生成"""
+        app = self.get_app(app_id, account)
+        if app.status != AppStatus.PUBLISHED:
+            raise FailException("应用未发布无法生成凭证")
+        token = generate_random_string(16)
+        self.update(app, token)
+        return token
 
     def _validate_draft_app_config(
         self, draft_app_config: dict[str, Any], account: Account

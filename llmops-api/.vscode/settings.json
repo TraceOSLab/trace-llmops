@@ -1,5 +1,18 @@
 {
   "python.defaultInterpreterPath": "${workspaceFolder}/.venv",
   "python.languageServer": "Default",
-  "python.terminal.activateEnvironment": true
+  "python.terminal.activateEnvironment": true,
+  "sqltools.connections": [
+    {
+      "ssh": "Disabled",
+      "previewLimit": 50,
+      "server": "localhost",
+      "port": 5432,
+      "driver": "PostgreSQL",
+      "name": "trace-llmops",
+      "database": "postgres",
+      "username": "admin",
+      "password": "adminqwer1234"
+    }
+  ]
 }

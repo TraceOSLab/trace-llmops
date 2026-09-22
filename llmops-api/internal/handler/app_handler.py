@@ -363,6 +363,18 @@ class AppHandler:
         return compact_generate_response(response)
 
     @login_required
+    def get_published_config(self, app_id: UUID):
+        """获取应用发布配置信息"""
+        app_config = self.app_service.get_published_config(app_id, current_user)
+        return success_json(app_config)
+
+    @login_required
+    def regenerate_web_app_token(self, app_id: UUID):
+        """重新生成 webapp token"""
+        token = self.app_service.regenerate_web_app_token(app_id, current_user)
+        return success_json({"token": token})
+
+    @login_required
     def ping(self):
         llm = self.language_model_manager.create_default_language_model()
         return success_json(
