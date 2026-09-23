@@ -108,6 +108,14 @@ class Workflow(BaseTool):
                             node_data=node,
                         ),
                     )
+                elif node.node_type == NodeType.TOOL:
+                    graph.add_node(
+                        node_flag,
+                        NodeClasses[node.node_type](
+                            node_data=node,
+                            account_id=self._workflow_config.account_id,
+                        ),
+                    )
                 else:
                     graph.add_node(
                         node_flag, NodeClasses[node.node_type](node_data=node)

@@ -63,7 +63,7 @@ data: {"event":"agent_message","id":"...","conversation_id":"...","message_id":"
 - `agent_end`、`error`、`stop`、`timeout` 的 `usage` 是当前 Agent 的汇总，`scope=agent`，包含 `call_count`、已知 token 小计、`complete`、`total_price` 和按币种区分的 `known_costs`。异常终止保守标记为不完整。
 - 公开 API 非流式响应和历史消息接口使用相同汇总口径；`Message.usage` 保存汇总，`MessageAgentThought.usage` 保存调用明细。历史记录没有快照时返回 `{}`，不追溯估算历史账单。
 
-目前只统计本次 Agent 主循环中的模型调用；摘要、标题、建议问题及独立 Workflow 的辅助调用不包括在 `scope=agent` 中。底层 SDK 未返回响应的重试、断流后的供应商实际收费无法由本地精确恢复。客户端断开导致 Service Generator 未运行到保存逻辑的情况仍受现有后台持久化设计限制。
+目前只统计本次 Agent 主循环中的模型调用；摘要、标题、建议问题及独立 Workflow 的辅助调用不包括在 `scope=agent` 中。底层 SDK 未返回响应的重试、断流后的供应商实际收费无法由本地精确恢复。客户端断开后，调试、公开 API 和辅助 Agent 的 Service 会在后台继续排空同一个 Agent iterator，再保存已收到的步骤和终止状态；这不取消已经发出的模型请求，也不提供断线客户端重连或事件重放。
 
 价格配置、迁移和验证见 [模型用量统计](../runbooks/model-usage.md)。未来前端消费金额前须检查 `usage.complete` 和 `usage.total_price`，并标明“按价目表计算”，不将其作为供应商实际扣款。
 

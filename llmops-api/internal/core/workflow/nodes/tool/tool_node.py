@@ -9,6 +9,7 @@
 import json
 import time
 from typing import Any
+from uuid import UUID
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
@@ -29,7 +30,7 @@ class ToolNode(BaseNode):
     node_data: ToolNodeData
     _tool: BaseTool = PrivateAttr(None)
 
-    def __init__(self, *args: Any, **kwargs: Any):
+    def __init__(self, *args: Any, account_id: UUID, **kwargs: Any):
         """工具初始化"""
         super().__init__(*args, **kwargs)
         from app.http.module import injector
@@ -51,7 +52,8 @@ class ToolNode(BaseNode):
             # 根据提供者获取插件
             api_tool = db.session.query(ApiTool).filter(
                 ApiTool.provider_id == self.node_data.provider_id,
-                ApiTool.name == self.node_data.tool_id
+                ApiTool.name == self.node_data.tool_id,
+                ApiTool.account_id == account_id,
             ).one_or_none()
             if not api_tool:
                 raise NotFoundException("该API插件不存在")

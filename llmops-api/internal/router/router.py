@@ -509,12 +509,11 @@ class Router:
         bp.add_url_rule(
             "/web-apps/<string:token>", view_func=self.web_app_handler.get_web_app
         )
-        # bp.add_url_rule(
-        #     "/web-apps/<string:token>/chat",
-        #     methods=["POST"],
-        #     view_func=self.web_app_hand
-        # ler.web_app_chat,
-        # )
+        bp.add_url_rule(
+            "/web-apps/<string:token>/chat",
+            methods=["POST"],
+            view_func=self.web_app_handler.web_app_chat,
+        )
         # bp.add_url_rule(
         #     "/web-apps/<string:token>/chat/<uuid:task_id>/stop",
         #     methods=["POST"],

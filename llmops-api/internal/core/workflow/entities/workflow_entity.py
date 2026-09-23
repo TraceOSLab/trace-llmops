@@ -348,7 +348,7 @@ class WorkflowConfig(BaseModel):
         cls, reverse_adj_list: defaultdict[Any, list], target_node_id: UUID
     ) -> list[UUID]:
         """获取某个几点的所有前置节点 根据逆邻接表&目标节点"""
-        visited = set()
+        visited = {target_node_id}
         predecessors = []
 
         def dfs(node_id: UUID):
@@ -359,7 +359,8 @@ class WorkflowConfig(BaseModel):
                 for neighbor in reverse_adj_list[node_id]:
                     dfs(neighbor)
 
-        dfs(target_node_id)
+        for predecessor in reverse_adj_list[target_node_id]:
+            dfs(predecessor)
         return predecessors
 
 

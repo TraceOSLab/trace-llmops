@@ -7,6 +7,7 @@
 """
 
 import json
+import logging
 import time
 import uuid
 from dataclasses import dataclass
@@ -306,6 +307,7 @@ class WorkflowService(BaseService):
                 )
                 self.update(workflow_in_session, **{"is_debug_passed": True})
             except Exception:
+                logging.exception("工作流调试执行失败，workflow_id=%s", workflow_id)
                 self.update(
                     workflow_result,
                     **{
@@ -314,6 +316,14 @@ class WorkflowService(BaseService):
                         "state": node_results,
                     },
                 )
+                # 失败的本次调试不能保留旧的通过标记，否则修改后的图可能被误发布。
+                self.update(workflow_in_session, **{"is_debug_passed": False})
+                data = {
+                    "id": str(uuid.uuid4()),
+                    "status": "failed",
+                    "error": "工作流执行失败",
+                }
+                yield f"event: workflow\ndata: {json.dumps(data)}\n\n"
 
         return handle_stream()
 

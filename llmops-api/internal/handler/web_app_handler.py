@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from flask_login import login_required
+from huggingface_hub import login
 from injector import inject
 
 from internal.schema.web_app_schema import GetWebAppResp
@@ -21,3 +22,8 @@ class WebAppHandler:
         app = self.web_app_service.get_web_app(token)
         resp = GetWebAppResp()
         return success_json(resp.dump(app))
+
+    @login_required
+    def web_app_chat(self, token: str):
+        """"""
+        pass
