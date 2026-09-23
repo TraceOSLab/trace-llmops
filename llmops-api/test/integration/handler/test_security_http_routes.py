@@ -155,6 +155,19 @@ def test_analysis_requires_app_owner_and_uses_real_calculation(client, other_acc
     cache.exists.assert_not_called()
 
 
+def test_analysis_returns_http_result_when_cache_write_fails(client, handler_for, monkeypatch):
+    app_id = assert_success(client.post("/apps", json=APP_PAYLOAD))["data"]["id"]
+    cache = MagicMock()
+    cache.exists.return_value = False
+    cache.setex.side_effect = ConnectionError("redis unavailable")
+    monkeypatch.setattr(handler_for("get_app_analysis").analysis_service, "redis_client", cache)
+
+    result = assert_success(client.get(f"/analysis/{app_id}"))["data"]
+
+    assert result["total_messages"]["data"] == 0
+    cache.setex.assert_called_once()
+
+
 def test_failed_transaction_can_be_followed_by_valid_database_write(db_session):
     from internal.extension.database_extension import db
     failed_id, good_id = uuid4(), uuid4()

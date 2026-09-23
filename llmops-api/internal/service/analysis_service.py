@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -94,8 +95,11 @@ class AnalysisService(BaseService):
             },
         }
 
-        # 13.将数据存储到redis缓存中，并设置过期时间为1天
-        self.redis_client.setex(cache_key, 24 * 60 * 60, json.dumps(app_analysis))
+        # 13.缓存只用于加速；Redis 不可用不能让已完成的统计计算失败。
+        try:
+            self.redis_client.setex(cache_key, 24 * 60 * 60, json.dumps(app_analysis))
+        except Exception:
+            logging.warning("统计缓存写入失败，直接返回已计算结果", exc_info=True)
 
         return app_analysis
 
