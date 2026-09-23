@@ -7,6 +7,8 @@
 """
 
 from enum import Enum
+from string import Formatter
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -48,8 +50,15 @@ class OpenAPISchema(BaseModel):
     @field_validator("server", mode="before")
     def validate_server(cls, server: str) -> str:
         """校验 server 字段"""
-        if server is None or server == "":
+        if not isinstance(server, str) or not server.strip():
             raise ValidateErrorException(message="server字段不能为空")
+        try:
+            parsed = urlsplit(server)
+            if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+                raise ValueError()
+            _ = parsed.port
+        except ValueError:
+            raise ValidateErrorException("server必须是有效的HTTP地址") from None
         return server
 
     @field_validator("description", mode="before")
@@ -65,7 +74,7 @@ class OpenAPISchema(BaseModel):
 
         # path 不为空类型为字典
         if not paths or not isinstance(paths, dict):
-            return ValidateErrorException("openapi_schema中的paths不能为空且必须为字典")
+            raise ValidateErrorException("openapi_schema中的paths不能为空且必须为字典")
 
         # 提取 paths 中每个元素，并获取元素下 get/post对应的值
         methods = ["get", "post"]
@@ -73,6 +82,8 @@ class OpenAPISchema(BaseModel):
         extra_paths = {}
 
         for path, path_item in paths.items():
+            if not isinstance(path, str) or not path.startswith("/") or not isinstance(path_item, dict):
+                raise ValidateErrorException("路径必须以/开头，路径配置必须为字典")
             for method in methods:
                 if method in path_item:
                     interfaces.append({
@@ -83,11 +94,15 @@ class OpenAPISchema(BaseModel):
 
         # 遍历提取到的所有接口并校验信息，涵盖operationId唯一标识，parameters参数
         operation_ids = []
+        if not interfaces:
+            raise ValidateErrorException("至少需要一个get或post接口")
         for interface in interfaces:
+            if not isinstance(interface["operation"], dict):
+                raise ValidateErrorException("接口配置必须为字典")
             # 校验 description&operationId&parameters
             if not isinstance(interface["operation"].get("description"), str):
                 raise ValidateErrorException("description 不能为空且为字符串")
-            if not isinstance(interface["operation"].get("operationId"), str):
+            if not isinstance(interface["operation"].get("operationId"), str) or not interface["operation"]["operationId"].strip():
                 raise ValidateErrorException("operationId 不能为空且为字符串")
             if not isinstance(interface["operation"].get("parameters", []), list):
                 raise ValidateErrorException("parameters 必须是列表或者为空")
@@ -99,11 +114,18 @@ class OpenAPISchema(BaseModel):
             operation_ids.append(interface["operation"]["operationId"])
 
             # 校验 parameters 参数格式
-            for parameter in interface["operation"]["parameters"]:
+            parameter_names = set()
+            path_names = set()
+            for parameter in interface["operation"].get("parameters", []):
+                if not isinstance(parameter, dict):
+                    raise ValidateErrorException("parameter必须为字典")
 
                 # 校验 name&in&description&required&type 参数
-                if not isinstance(parameter.get("name"), str):
+                if not isinstance(parameter.get("name"), str) or not parameter["name"].strip():
                     raise ValidateErrorException("parameter.name 参数必须为字符串且不为空")
+                if parameter["name"] in parameter_names:
+                    raise ValidateErrorException("parameter.name不能重复")
+                parameter_names.add(parameter["name"])
                 if not isinstance(parameter.get("description"), str):
                     raise ValidateErrorException("parameter.description 参数必须为字符串且不为空")
                 if not isinstance(parameter.get("required"), bool):
@@ -124,10 +146,21 @@ class OpenAPISchema(BaseModel):
                     raise ValidateErrorException(
                         f"parameter.type参数必须为{'/'.join([item.value for item in ParameterType])}"
                     )
+                if parameter["in"] == "path":
+                    if not parameter["required"]:
+                        raise ValidateErrorException("路径参数必须为必填")
+                    path_names.add(parameter["name"])
+
+            try:
+                parts = list(Formatter().parse(interface["path"]))
+                placeholders = {name for _, name, _, _ in parts if name is not None}
+                if placeholders != path_names or any(spec or conversion for _, _, spec, conversion in parts):
+                    raise ValueError()
+            except ValueError:
+                raise ValidateErrorException("路径占位符必须与必填路径参数一致") from None
 
             # 组装数据并更新
-            extra_paths[interface["path"]] = {
-                interface["method"]: {
+            extra_paths.setdefault(interface["path"], {})[interface["method"]] = {
                     "description": interface["operation"]["description"],
                     "operationId": interface["operation"]["operationId"],
                     "parameters": [
@@ -140,7 +173,6 @@ class OpenAPISchema(BaseModel):
                         }
                         for parameter in interface["operation"].get("parameters", [])
                     ],
-                }
             }
 
         return extra_paths

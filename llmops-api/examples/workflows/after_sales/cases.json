@@ -1,0 +1,94 @@
+[
+  {
+    "name": "TEST-1001",
+    "inputs": {
+      "query": "我的订单可以退货吗？",
+      "order_id": "TEST-1001"
+    },
+    "expected": {
+      "order_id": "TEST-1001",
+      "decision": "return_eligible",
+      "http_status": 200,
+      "eligible": true,
+      "amount": 129.9
+    }
+  },
+  {
+    "name": "TEST-1002",
+    "inputs": {
+      "query": "我的订单可以退货吗？",
+      "order_id": "TEST-1002"
+    },
+    "expected": {
+      "order_id": "TEST-1002",
+      "decision": "manual_review",
+      "http_status": 200,
+      "eligible": false,
+      "amount": 59.0
+    }
+  },
+  {
+    "name": "TEST-1003",
+    "inputs": {
+      "query": "我的订单可以退货吗？",
+      "order_id": "TEST-1003"
+    },
+    "expected": {
+      "order_id": "TEST-1003",
+      "decision": "manual_review",
+      "http_status": 200,
+      "eligible": false,
+      "amount": 89.0
+    }
+  },
+  {
+    "name": "TEST-9999",
+    "inputs": {
+      "query": "我的订单可以退货吗？",
+      "order_id": "TEST-9999"
+    },
+    "expected": {
+      "order_id": "TEST-9999",
+      "decision": "order_not_found",
+      "http_status": 404,
+      "eligible": false,
+      "amount": 0.0
+    }
+  },
+  {
+    "name": "输入规范化",
+    "inputs": {
+      "query": "  可以申请退货吗？  ",
+      "order_id": " test-1001 ",
+      "category": ""
+    },
+    "expected": {
+      "order_id": "TEST-1001",
+      "decision": "return_eligible"
+    }
+  },
+  {
+    "name": "失效API响应",
+    "inputs": {
+      "query": "可以退货吗？",
+      "order_id": "TEST-1001",
+      "category": "missing"
+    },
+    "expected_failure": "校验API工具业务结果"
+  },
+  {
+    "name": "空白问题",
+    "inputs": {
+      "query": "   ",
+      "order_id": "TEST-1001"
+    },
+    "expected_failure": "校验并规范输入"
+  },
+  {
+    "name": "缺少必填项",
+    "inputs": {
+      "query": "可以退货吗？"
+    },
+    "expected_failure": "开始：售后测试输入"
+  }
+]

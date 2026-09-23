@@ -12,6 +12,7 @@ from typing import Any
 from uuid import UUID
 
 from injector import inject
+from pydantic import ValidationError
 from sqlalchemy import desc
 
 from internal.core.tools.api_tools.entities import OpenAPISchema
@@ -53,39 +54,42 @@ class ApiToolService(BaseService):
         # 校验 openapi_schema
         openapi_schema = self.parse_openapi_schema(req.openapi_schema.data)
 
-        # 该账号下是否有同名的工具提供者
-        api_tool_provider = self.db.session.query(ApiToolProvider).filter_by(
-            account_id=account.id,
-            name=req.name.data,
-        ).one_or_none()
+        with self.db.auto_commit():
+            # 名称检查与写入同一事务，串行化同账号的工具目录修改。
+            self._lock_account(account.id)
+            # 该账号下是否有同名的工具提供者
+            api_tool_provider = self.db.session.query(ApiToolProvider).filter_by(
+                account_id=account.id,
+                name=req.name.data,
+            ).one_or_none()
 
-        if api_tool_provider:
-            raise ValidateErrorException(f"该工具提供者名字{req.name.data}已存在")
+            if api_tool_provider:
+                raise ValidateErrorException(f"该工具提供者名字{req.name.data}已存在")
 
-        # 创建工具提供者
-        api_tool_provider = self.create(
-            ApiToolProvider,
-            account_id=account.id,
-            name=req.name.data,
-            icon=req.icon.data,
-            description=openapi_schema.description,
-            openapi_schema=req.openapi_schema.data,
-            headers=req.headers.data,
-        )
+            api_tool_provider = ApiToolProvider(
+                account_id=account.id, name=req.name.data, icon=req.icon.data,
+                description=openapi_schema.description,
+                openapi_schema=req.openapi_schema.data, headers=req.headers.data,
+            )
+            self.db.session.add(api_tool_provider)
+            self.db.session.flush()
+            self._add_tools(api_tool_provider, openapi_schema)
 
-        # 创建自定义工具
-        for path, path_item in openapi_schema.paths.items():
-            for method, method_item in path_item.items():
-                self.create(
-                    ApiTool,
-                    account_id=account.id,
-                    provider_id=api_tool_provider.id,
-                    name=method_item.get("operationId"),
-                    description=method_item.get("description"),
-                    url=f"{openapi_schema.server}{path}",
-                    method=method,
-                    parameters=method_item.get("parameters", []),
-                )
+    def _lock_account(self, account_id: UUID) -> None:
+        owner = self.db.session.query(Account.id).filter_by(id=account_id).with_for_update().one_or_none()
+        if owner is None:
+            raise NotFoundException("账号不存在")
+
+    def _add_tools(self, provider: ApiToolProvider, schema: OpenAPISchema) -> None:
+        """只加入当前事务，由调用方统一提交提供者和全部工具。"""
+        for path, path_item in schema.paths.items():
+            for method, operation in path_item.items():
+                self.db.session.add(ApiTool(
+                    account_id=provider.account_id, provider_id=provider.id,
+                    name=operation["operationId"], description=operation["description"],
+                    url=f"{schema.server}{path}", method=method,
+                    parameters=operation.get("parameters", []),
+                ))
 
     def update_api_tool_provider(self, req: CreateApiToolReq, provider_id: UUID, account: Account) -> None:
         """更新自定义插件"""
@@ -93,50 +97,38 @@ class ApiToolService(BaseService):
         # 校验 openapi_schema
         openapi_schema = self.parse_openapi_schema(req.openapi_schema.data)
 
-        # 是否存在该供应商
-        api_tool_provider = self.get(ApiToolProvider, provider_id)
-        if api_tool_provider is None or api_tool_provider.account_id != account.id:
-            raise NotFoundException("该工具提供者不存在")
-
-        # 更新的数据是否存在
-        check_api_tool_provider = self.db.session.query(ApiToolProvider).filter(
-            ApiToolProvider.account_id == account.id,
-            ApiToolProvider.name == req.name.data,
-            ApiToolProvider.id != api_tool_provider.id
-        ).one_or_none()
-        if check_api_tool_provider:
-            raise ValidateErrorException(f"该工具提供者名字{req.name.data}已存在")
-
-        # 先删除该提供商下的所有工具
         with self.db.auto_commit():
-            self.db.session.query(ApiTool).filter(
-                ApiTool.provider_id == provider_id,
-                ApiTool.account_id == account.id,
+            # 名称检查与写入同一事务，串行化同账号的工具目录修改。
+            self._lock_account(account.id)
+            # 是否存在该供应商
+            api_tool_provider = self.get(ApiToolProvider, provider_id)
+            if api_tool_provider is None or api_tool_provider.account_id != account.id:
+                raise NotFoundException("该工具提供者不存在")
+
+            # 更新的数据是否存在
+            check_api_tool_provider = self.db.session.query(ApiToolProvider).filter(
+                ApiToolProvider.account_id == account.id,
+                ApiToolProvider.name == req.name.data,
+                ApiToolProvider.id != api_tool_provider.id
+            ).one_or_none()
+            if check_api_tool_provider:
+                raise ValidateErrorException(f"该工具提供者名字{req.name.data}已存在")
+
+            # 与同一提供者的更新/删除串行，避免两个更新混合工具列表。
+            api_tool_provider = self.db.session.query(ApiToolProvider).filter_by(
+                id=provider_id, account_id=account.id,
+            ).populate_existing().with_for_update().one_or_none()
+            if api_tool_provider is None:
+                raise NotFoundException("该工具提供者不存在")
+            self.db.session.query(ApiTool).filter_by(
+                provider_id=provider_id, account_id=account.id,
             ).delete()
-
-        # 更新该提供商以及工具
-        self.update(
-            api_tool_provider,
-            name=req.name.data,
-            icon=req.icon.data,
-            headers=req.headers.data,
-            description=openapi_schema.description,
-            openapi_schema=req.openapi_schema.data,
-        )
-
-        # 创建自定义工具
-        for path, path_item in openapi_schema.paths.items():
-            for method, method_item in path_item.items():
-                self.create(
-                    ApiTool,
-                    account_id=account.id,
-                    provider_id=api_tool_provider.id,
-                    name=method_item.get("operationId"),
-                    description=method_item.get("description"),
-                    url=f"{openapi_schema.server}{path}",
-                    method=method,
-                    parameters=method_item.get("parameters", []),
-                )
+            api_tool_provider.name = req.name.data
+            api_tool_provider.icon = req.icon.data
+            api_tool_provider.headers = req.headers.data
+            api_tool_provider.description = openapi_schema.description
+            api_tool_provider.openapi_schema = req.openapi_schema.data
+            self._add_tools(api_tool_provider, openapi_schema)
 
     def delete_api_tool_provider(self, provider_id: UUID, account: Account):
         """根据 provider_id 删除对应提供商"""
@@ -147,7 +139,14 @@ class ApiToolService(BaseService):
 
         # 删除该工具提供商下的所有工具
         with self.db.auto_commit():
-            self.db.session.query(ApiTool).filter(provider_id == provider_id, account.id == account.id).delete()
+            api_tool_provider = self.db.session.query(ApiToolProvider).filter_by(
+                id=provider_id, account_id=account.id,
+            ).populate_existing().with_for_update().one_or_none()
+            if api_tool_provider is None:
+                raise NotFoundException("该工具提供商不存在")
+            self.db.session.query(ApiTool).filter_by(
+                provider_id=provider_id, account_id=account.id,
+            ).delete()
             self.db.session.delete(api_tool_provider)
 
     def get_api_tool_provider(self, provider_id: UUID, account: Account) -> ApiToolProvider:
@@ -208,4 +207,7 @@ class ApiToolService(BaseService):
         except Exception as e:
             raise ValidateErrorException("传递的数据必须符合OpenAPI规范的JSON字符串")
 
-        return OpenAPISchema(**data)
+        try:
+            return OpenAPISchema(**data)
+        except ValidationError:
+            raise ValidateErrorException("OpenAPI字段类型或结构错误") from None

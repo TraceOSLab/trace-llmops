@@ -11,6 +11,7 @@ from langchain_community.tools import DuckDuckGoSearchRun
 from pydantic import BaseModel, Field
 
 from internal.lib.helper import add_attribute
+from internal.exception import ValidateErrorException
 
 
 class DDGInput(BaseModel):
@@ -20,7 +21,10 @@ class DDGInput(BaseModel):
 @add_attribute("args_schema", DDGInput)
 def duckduckgo_search(*args, **kwargs) -> BaseTool:
     """返回 DuckDuckGo 搜索工具"""
-    return DuckDuckGoSearchRun(
-        description="一个注重隐私的搜索工具，当你需要搜索时事时可以使用该工具，工具的输入是一个查询语句",
-        args_schema=DDGInput
-    )
+    try:
+        return DuckDuckGoSearchRun(
+            description="一个注重隐私的搜索工具，当你需要搜索时事时可以使用该工具，工具的输入是一个查询语句",
+            args_schema=DDGInput
+        )
+    except ImportError:
+        raise ValidateErrorException("DuckDuckGo工具缺少可选依赖ddgs") from None

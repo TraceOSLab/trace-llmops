@@ -7,6 +7,8 @@
 """
 
 from dataclasses import dataclass
+from contextlib import closing
+from urllib.parse import quote
 from typing import Callable, Type, Optional
 
 import requests
@@ -44,19 +46,25 @@ class ApiProviderManager(BaseModel):
             # 校验传递的字段
             for key, value in kwargs.items():
                 parameter = parameter_map.get(key)
-                if parameter is None:
+                if parameter is None or value is None:
                     continue
+                if parameter.get("in") == ParameterIn.PATH:
+                    value = quote(str(value), safe="")
+                elif parameter.get("in") in {ParameterIn.HEADER, ParameterIn.COOKIE}:
+                    value = str(value)
                 parameters[parameter.get("in", ParameterIn.QUERY)][key] = value
 
             # 构建 request 请求并返回内容
-            return requests.request(
+            with closing(requests.request(
                 method=tool_entity.method,
                 url=tool_entity.url.format(**parameters[ParameterIn.PATH]),
                 params=parameters[ParameterIn.QUERY],
                 json=parameters[ParameterIn.REQUEST_BODY],
                 headers={**header_map, **parameters[ParameterIn.HEADER]},
                 cookies=parameters[ParameterIn.COOKIE],
-            ).text
+                timeout=(5, 30),
+            )) as response:
+                return response.text
 
         return tool_func
 
@@ -72,7 +80,7 @@ class ApiProviderManager(BaseModel):
 
             fields[field_name] = (
                 field_type if field_required else Optional[field_type],
-                Field(description=field_description),
+                Field(default=... if field_required else None, description=field_description),
             )
 
         return create_model("DynamicModel", **fields)

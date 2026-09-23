@@ -16,7 +16,7 @@ from injector import inject
 from langchain_core.language_models import BaseLanguageModel
 
 from internal.core.language_model import LanguageModelManager
-from internal.exception.exception import NotFoundException
+from internal.exception.exception import NotFoundException, ValidateErrorException
 from internal.lib.helper import convert_model_to_dict
 from internal.service.base_service import BaseService
 from pkg.sqlalchemy import SQLAlchemy
@@ -115,30 +115,13 @@ class LanguageModelService(BaseService):
             byte_data = f.read()
             return byte_data, mimetype
 
-    def load_language_model(self, model_config: dict[str, Any]) -> dict[str, Any]:
-        """根据传递的模型配置加载模型实例"""
+    def load_language_model(self, model_config: dict[str, Any]) -> BaseLanguageModel:
+        """兼容旧入口，复用统一工厂；仅配置错误回退到默认模型。"""
         try:
-            # 提取 provider、model、parameters
-            provider_name = model_config.get("provider", "")
-            model_name = model_config.get("model", "")
-            parameters = model_config.get("parameters", {})
-
-            # 从模型管理器获取提供者、模型实体、模型类
-            provider = self.language_model_manager.get_provider(provider_name)
-            model_entity = provider.get_model_entity(model_name)
-            model_class = provider.get_model_class(model_entity.model_type)
-
-            # 实例化模型并返回
-            return model_class(
-                **model_entity.attributes,
-                **parameters,
-                features=model_entity.features,
-                metadata=model_entity.metadata,
-            )
-        except Exception as _:
+            self.language_model_manager.validate_model_config(model_config)
+        except ValidateErrorException:
             return self.load_default_language_model()
+        return self.language_model_manager.create_language_model(model_config)
 
-    @classmethod
-    def load_default_language_model(cls) -> BaseLanguageModel:
-        """加载默认模型 匹配不到时使用默认模型进行兜底"""
-        return cls.language_model_manager.create_default_language_model()
+    def load_default_language_model(self) -> BaseLanguageModel:
+        return self.language_model_manager.create_default_language_model()

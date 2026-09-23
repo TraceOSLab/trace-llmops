@@ -7,6 +7,7 @@
 """
 
 import os
+import math
 from functools import lru_cache
 from typing import Any, Mapping, Optional, Type
 
@@ -197,7 +198,16 @@ class LanguageModelManager(BaseModel):
         if base_url:
             init_kwargs["base_url"] = base_url
 
-        return model_class(**init_kwargs)
+        # 只在 SDK 确实支持的字段上配置传输边界，不注入模型生成参数。
+        if config.provider in {"openai", "deepseek", "moonshot", "doubao", "zhipu"}:
+            init_kwargs.update(timeout=60, max_retries=0)
+        elif config.provider == "ollama":
+            init_kwargs["client_kwargs"] = {"timeout": 60}
+
+        try:
+            return model_class(**init_kwargs)
+        except ImportError:
+            raise ValidateErrorException(f"模型提供者{config.provider}缺少可选SDK依赖") from None
 
     def create_default_language_model(
         self, parameters: Optional[Mapping[str, Any]] = None
@@ -212,7 +222,7 @@ class LanguageModelManager(BaseModel):
         max_attempts: int = 2,
     ) -> Runnable[Any, BaseModel]:
         """按模型目录声明的策略创建带校验和有限重试的结构化模型。"""
-        if max_attempts < 1:
+        if type(max_attempts) is not int or max_attempts < 1:
             raise ValidateErrorException("结构化输出尝试次数不能小于1")
 
         config = self.validate_model_config(model_config)
@@ -288,6 +298,8 @@ class LanguageModelManager(BaseModel):
         if not valid_type(value):
             raise ValidateErrorException(f"模型参数{name}类型错误")
         if isinstance(value, (int, float)) and not isinstance(value, bool):
+            if isinstance(value, float) and not math.isfinite(value):
+                raise ValidateErrorException(f"模型参数{name}必须是有限数值")
             if rule.min is not None and value < rule.min:
                 raise ValidateErrorException(f"模型参数{name}不能小于{rule.min}")
             if rule.max is not None and value > rule.max:

@@ -8,6 +8,7 @@
 
 import json
 import os
+from contextlib import ExitStack
 from typing import Type, Any
 
 import requests
@@ -29,6 +30,7 @@ class GaodeWeatherTool(BaseTool):
 
     def _run(self, *args: Any, **kwargs: Any) -> str:
         """根据传入的城市名称运行调用api获取城市对应的天气预报信息"""
+        resources = ExitStack()
         try:
             # 1.获取高德API密钥，如果没有创建的话，则抛出错误
             gaode_api_key = os.getenv("GAODE_API_KEY")
@@ -39,13 +41,16 @@ class GaodeWeatherTool(BaseTool):
             city = kwargs.get("city", "")
             api_domain = "https://restapi.amap.com/v3"
             session = requests.session()
+            resources.callback(session.close)
 
             # 3.发起行政区域编码查询，根据city获取ad_code
             city_response = session.request(
                 method="GET",
                 url=f"{api_domain}/config/district?key={gaode_api_key}&keywords={city}&subdistrict=0",
                 headers={"Content-Type": "application/json; charset=utf-8"},
+                timeout=(5, 30),
             )
+            resources.callback(city_response.close)
             city_response.raise_for_status()
             city_data = city_response.json()
             if city_data.get("info") == "OK":
@@ -56,7 +61,9 @@ class GaodeWeatherTool(BaseTool):
                     method="GET",
                     url=f"{api_domain}/weather/weatherInfo?key={gaode_api_key}&city={ad_code}&extensions=all",
                     headers={"Content-Type": "application/json; charset=utf-8"},
+                    timeout=(5, 30),
                 )
+                resources.callback(weather_response.close)
                 weather_response.raise_for_status()
                 weather_data = weather_response.json()
                 if weather_data.get("info") == "OK":
@@ -65,6 +72,8 @@ class GaodeWeatherTool(BaseTool):
             return f"获取{city}天气预报信息失败"
         except Exception as e:
             return f"获取{kwargs.get('city', '')}天气预报信息失败"
+        finally:
+            resources.close()
 
 
 @add_attribute("args_schema", GaodeWeatherArgsSchema)

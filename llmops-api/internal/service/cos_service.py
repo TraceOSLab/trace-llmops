@@ -6,6 +6,7 @@
 @Author :   s.qiu@foxmail.com
 """
 import hashlib
+import logging
 import os
 import uuid
 from dataclasses import dataclass
@@ -32,12 +33,19 @@ class CosService:
         """上传文件到腾讯云cos对象存储，上传后返回文件的信息"""
 
         # 检测文件扩展名是否满足要求
-        filename = file.filename
-        extension = file.filename.rsplit('.', 1)[-1] if "." in filename else ""
+        filename = (file.filename or "").replace("\\", "/").rsplit("/", 1)[-1]
+        if not filename or len(filename) > 255 or any(ord(char) < 32 for char in filename):
+            raise FailException("文件名无效或超过255个字符")
+        extension = filename.rsplit('.', 1)[-1].lower() if "." in filename else ""
         if extension.lower() not in (ALLOWED_IMAGE_EXTENSION + ALLOWED_DOCUMENT_EXTENSION):
             raise FailException(f"不允许上传.{extension}扩展的文件")
         if only_image and extension not in ALLOWED_IMAGE_EXTENSION:
             raise FailException(f"不允许上传.{extension}扩展的文件，请上传正确的图片")
+
+        # 限制读取量，服务层调用也不能绕过 Handler 的 15MB 限制。
+        file_content = file.stream.read(15 * 1024 * 1024 + 1)
+        if len(file_content) > 15 * 1024 * 1024:
+            raise FailException("上传文件最大不能超过15MB")
 
         # 获取 COS 配置
         bucket = self._get_bucket()
@@ -49,7 +57,6 @@ class CosService:
         upload_filename = f"{now.year}/{now.month:02d}/{now.day:02d}/{random_filename}"
 
         # 流式读取并上传COS
-        file_content = file.stream.read()
 
         try:
             # 5.将数据上传到cos存储桶中
@@ -58,15 +65,23 @@ class CosService:
             raise FailException("上传文件失败，请稍后重试")
 
         # 创建upload_file记录
-        return self.upload_file_service.create_upload_file(
-            account_id=account.id,
-            name=filename,
-            key=upload_filename,
-            size=len(file_content),
-            extension=extension,
-            mime_type=file.mimetype,
-            hash=hashlib.sha3_256(file_content).hexdigest(),
-        )
+        try:
+            return self.upload_file_service.create_upload_file(
+                account_id=account.id,
+                name=filename,
+                key=upload_filename,
+                size=len(file_content),
+                extension=extension,
+                mime_type=file.mimetype,
+                hash=hashlib.sha3_256(file_content).hexdigest(),
+            )
+        except Exception:
+            # 只补偿本次新建的随机对象，不触碰其他已上传文件。
+            try:
+                client.delete_object(Bucket=bucket, Key=upload_filename)
+            except Exception:
+                logging.getLogger(__name__).error("上传记录失败且对象清理失败，待清理 key=%s", upload_filename)
+            raise
 
     def download_file(self, key: str, target_file_path: str):
         """下载cos云端的文件到指定路径"""
@@ -95,9 +110,10 @@ class CosService:
             SecretId=os.getenv("COS_SECRET_ID"),
             SecretKey=os.getenv("COS_SECRET_KEY"),
             Token=None,
-            Scheme=os.getenv("COS_SCHEME", "https")
+            Scheme=os.getenv("COS_SCHEME", "https"),
+            Timeout=30,
         )
-        return CosS3Client(conf)
+        return CosS3Client(conf, retry=0)
 
     @classmethod
     def _get_bucket(cls) -> str:

@@ -10,11 +10,13 @@ from langchain_community.tools.wikipedia.tool import WikipediaQueryRun, Wikipedi
 from langchain_community.utilities import WikipediaAPIWrapper
 
 from internal.lib.helper import add_attribute
+from internal.exception import ValidateErrorException
 
 
 @add_attribute("args_schema", WikipediaQueryInput)
 def wikipedia_search(**kwargs) -> BaseTool:
     """返回维基百科搜索工具"""
-    return WikipediaQueryRun(
-        api_wrapper=WikipediaAPIWrapper()
-    )
+    try:
+        return WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper())
+    except ImportError:
+        raise ValidateErrorException("Wikipedia工具缺少可选依赖wikipedia") from None

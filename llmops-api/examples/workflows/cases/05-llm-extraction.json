@@ -1,0 +1,31 @@
+[
+  {
+    "name": "姓名和邮箱齐全",
+    "inputs": {
+      "text": "联系人姓名：张三；邮箱：zhangsan@example.com。"
+    },
+    "expected": {
+      "name": "张三",
+      "email": "zhangsan@example.com",
+      "format_valid": true
+    }
+  },
+  {
+    "name": "信息缺失不应编造",
+    "inputs": {
+      "text": "今天下午三点开会。"
+    },
+    "expected": {
+      "name": "",
+      "email": "",
+      "format_valid": true
+    }
+  },
+  {
+    "name": "空文本",
+    "inputs": {
+      "text": "  "
+    },
+    "expected_failure_node": "校验文本长度"
+  }
+]

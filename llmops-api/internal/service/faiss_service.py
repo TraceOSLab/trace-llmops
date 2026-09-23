@@ -7,6 +7,7 @@ from internal.core.agent.entities.agent_entity import DATASET_RETRIEVAL_TOOL_NAM
 from internal.lib.helper import combine_documents
 from internal.service import EmbeddingsService
 import os
+from threading import Lock
 
 
 class FaissService:
@@ -19,13 +20,25 @@ class FaissService:
     def __init__(self, embeddings_service: EmbeddingsService):
         """初始化Faiss"""
         self.embeddings_service = embeddings_service
+        self._faiss = None
+        self._lock = Lock()
+
+    @property
+    def faiss(self) -> FAISS:
+        """第一次检索时加载；失败不缓存，且并发只加载一次。"""
+        with self._lock:
+            if self._faiss is None:
+                self._faiss = self._load_faiss()
+            return self._faiss
+
+    def _load_faiss(self) -> FAISS:
 
         # 加载本地向量数据库
         internal_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         faiss_vector_store_path = os.path.join(internal_path, "core", "vector_store")
 
         # 初始化faiss向量数据库
-        self.faiss = FAISS.load_local(
+        return FAISS.load_local(
             folder_path=faiss_vector_store_path,
             embeddings=self.embeddings_service.embeddings,
             allow_dangerous_deserialization=True,

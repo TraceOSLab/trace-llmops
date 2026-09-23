@@ -496,7 +496,8 @@ class Router:
         bp.add_url_rule(
             "/assistant-agent/delete-conversation",
             methods=["POST"],
-            view_func=self.assistant_agent_handler.delete_assistant_agent_conversation,
+            view_func=self.assistant_agent_handler.
+            delete_assistant_agent_conversation,
         )
 
         # 应用统计模块
@@ -512,7 +513,8 @@ class Router:
         # bp.add_url_rule(
         #     "/web-apps/<string:token>/chat",
         #     methods=["POST"],
-        #     view_func=self.web_app_handler.web_app_chat,
+        #     view_func=self.web_app_hand
+        # ler.web_app_chat,
         # )
         # bp.add_url_rule(
         #     "/web-apps/<string:token>/chat/<uuid:task_id>/stop",

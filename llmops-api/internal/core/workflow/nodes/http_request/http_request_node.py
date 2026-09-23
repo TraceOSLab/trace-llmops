@@ -54,21 +54,26 @@ class HttpRequestNode(BaseNode):
         request_method = request_methods[self.node_data.method]
         if self.node_data.method == HttpRequestMethod.GET:
             response = request_method(
-                self.node_data.url,
+                str(self.node_data.url),
                 headers=inputs_dict[HttpRequestInputType.HEADERS],
-                params=inputs_dict[HttpRequestInputType.PARAMS]
+                params=inputs_dict[HttpRequestInputType.PARAMS],
+                timeout=(5, 30),
             )
         else:
             response = request_method(
-                self.node_data.url,
+                str(self.node_data.url),
                 headers=inputs_dict[HttpRequestInputType.HEADERS],
                 params=inputs_dict[HttpRequestInputType.PARAMS],
-                data=inputs_dict[HttpRequestInputType.BODY]
+                data=inputs_dict[HttpRequestInputType.BODY],
+                timeout=(5, 30),
             )
 
         # 构建输出数据结构
-        text = response.text
-        status_code = response.status_code
+        try:
+            text = response.text
+            status_code = response.status_code
+        finally:
+            response.close()
         outputs = {"text": text, "status_code": status_code}
         return {
             "node_results": [

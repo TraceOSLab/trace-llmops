@@ -38,7 +38,7 @@ class EmbeddingsService:
         self._lock = threading.Lock()
 
         # 路径配置
-        self._base_cache_dir = Path(os.getcwd()) / "internal" / "core" / "embeddings"
+        self._base_cache_dir = Path(__file__).resolve().parents[1] / "core" / "embeddings"
         self._model_repo_id = "Alibaba-NLP/gte-multilingual-base"
         self._model_path = self._resolve_model_path()
 
@@ -101,12 +101,13 @@ class EmbeddingsService:
                 )
 
                 # 缓存层封装
-                self._embeddings = base_embeddings  # 保留原始引用
-                self._cache_backed_embeddings = CacheBackedEmbeddings.from_bytes_store(
+                cached_embeddings = CacheBackedEmbeddings.from_bytes_store(
                     base_embeddings,
                     self._store,
                     namespace="embeddings",
                 )
+                self._cache_backed_embeddings = cached_embeddings
+                self._embeddings = base_embeddings
                 print("✅ [Embeddings] 模型加载完成")
             except Exception as e:
                 print(f"❌ [Embeddings] 模型加载失败: {e}")

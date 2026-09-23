@@ -1,0 +1,323 @@
+{
+  "nodes": [
+    {
+      "id": "903c8d42-07aa-5111-8cc4-4f9c9ff351fe",
+      "node_type": "start",
+      "title": "输入待办ID",
+      "description": "输入待办ID",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "inputs": [
+        {
+          "name": "todo_id",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": 0
+          },
+          "meta": {},
+          "description": ""
+        }
+      ]
+    },
+    {
+      "id": "289412e0-3ce8-5366-9961-6d861966fbc5",
+      "node_type": "code",
+      "title": "校验待办ID",
+      "description": "校验待办ID",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "inputs": [
+        {
+          "name": "todo_id",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "903c8d42-07aa-5111-8cc4-4f9c9ff351fe",
+              "ref_var_name": "todo_id"
+            }
+          },
+          "meta": {},
+          "description": ""
+        }
+      ],
+      "outputs": [
+        {
+          "name": "todo_id",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": 0
+          },
+          "meta": {},
+          "description": ""
+        }
+      ],
+      "code": "def main(params):\n    if not 1 <= params['todo_id'] <= 200:\n        raise ValueError('todo_id必须在1至200之间')\n    return {'todo_id':params['todo_id']}"
+    },
+    {
+      "id": "5256579f-a4bf-5d88-90ad-eb8ab75d61aa",
+      "node_type": "http_request",
+      "title": "按ID查询单条待办",
+      "description": "按ID查询单条待办",
+      "position": {
+        "x": 1800,
+        "y": 0
+      },
+      "url": "https://jsonplaceholder.typicode.com/todos",
+      "method": "get",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "289412e0-3ce8-5366-9961-6d861966fbc5",
+              "ref_var_name": "todo_id"
+            }
+          },
+          "meta": {
+            "type": "params"
+          },
+          "description": ""
+        },
+        {
+          "name": "Accept",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "literal",
+            "content": "application/json"
+          },
+          "meta": {
+            "type": "headers"
+          },
+          "description": ""
+        }
+      ]
+    },
+    {
+      "id": "08ed2cc5-5466-5501-b22b-31a818a0264b",
+      "node_type": "code",
+      "title": "验证状态码与查询结果",
+      "description": "验证状态码与查询结果",
+      "position": {
+        "x": 2700,
+        "y": 0
+      },
+      "inputs": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "5256579f-a4bf-5d88-90ad-eb8ab75d61aa",
+              "ref_var_name": "text"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "status_code",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "5256579f-a4bf-5d88-90ad-eb8ab75d61aa",
+              "ref_var_name": "status_code"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "todo_id",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "289412e0-3ce8-5366-9961-6d861966fbc5",
+              "ref_var_name": "todo_id"
+            }
+          },
+          "meta": {},
+          "description": ""
+        }
+      ],
+      "outputs": [
+        {
+          "name": "task_id",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": 0
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": ""
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "completed",
+          "type": "boolean",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": false
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "response_chars",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": 0
+          },
+          "meta": {},
+          "description": ""
+        }
+      ],
+      "code": "def main(params):\n    import json\n    if params['status_code'] != 200:\n        raise ValueError('HTTP响应不是200')\n    data = json.loads(params['text'])\n    if not isinstance(data, list) or len(data) != 1:\n        raise ValueError('预期仅返回一条待办')\n    task = data[0]\n    if task['id'] != params['todo_id'] or not isinstance(task['title'], str) or type(task['completed']) is not bool:\n        raise ValueError('接口字段或ID不匹配')\n    return {'task_id':task['id'], 'title':task['title'], 'completed':task['completed'], 'response_chars':len(params['text'])}"
+    },
+    {
+      "id": "c0565b18-2783-599e-9d89-9f3fbcc9bf9b",
+      "node_type": "end",
+      "title": "输出HTTP测试结果",
+      "description": "输出HTTP测试结果",
+      "position": {
+        "x": 3600,
+        "y": 0
+      },
+      "outputs": [
+        {
+          "name": "task_id",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "08ed2cc5-5466-5501-b22b-31a818a0264b",
+              "ref_var_name": "task_id"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "08ed2cc5-5466-5501-b22b-31a818a0264b",
+              "ref_var_name": "title"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "completed",
+          "type": "boolean",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "08ed2cc5-5466-5501-b22b-31a818a0264b",
+              "ref_var_name": "completed"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "response_chars",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "08ed2cc5-5466-5501-b22b-31a818a0264b",
+              "ref_var_name": "response_chars"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "http_status",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "5256579f-a4bf-5d88-90ad-eb8ab75d61aa",
+              "ref_var_name": "status_code"
+            }
+          },
+          "meta": {},
+          "description": ""
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "a4d1fc43-9d5c-5e18-9e68-e1e44251f8fa",
+      "source": "903c8d42-07aa-5111-8cc4-4f9c9ff351fe",
+      "target": "289412e0-3ce8-5366-9961-6d861966fbc5",
+      "source_type": "start",
+      "target_type": "code"
+    },
+    {
+      "id": "fff5ce84-459f-58a1-afe9-cafc09a683e1",
+      "source": "289412e0-3ce8-5366-9961-6d861966fbc5",
+      "target": "5256579f-a4bf-5d88-90ad-eb8ab75d61aa",
+      "source_type": "code",
+      "target_type": "http_request"
+    },
+    {
+      "id": "d98c09b0-d578-59c9-9c2d-3ffa668a4d6e",
+      "source": "5256579f-a4bf-5d88-90ad-eb8ab75d61aa",
+      "target": "08ed2cc5-5466-5501-b22b-31a818a0264b",
+      "source_type": "http_request",
+      "target_type": "code"
+    },
+    {
+      "id": "ed263b6d-e687-5868-9d70-a2543433a740",
+      "source": "08ed2cc5-5466-5501-b22b-31a818a0264b",
+      "target": "c0565b18-2783-599e-9d89-9f3fbcc9bf9b",
+      "source_type": "code",
+      "target_type": "end"
+    }
+  ]
+}

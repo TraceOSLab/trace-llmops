@@ -90,6 +90,8 @@ class BuiltinToolService:
         provider_path = os.path.join(root_path, "internal", "core", "tools", "builtin_tools", "providers",
                                      provider_name)
         icon_path = os.path.join(provider_path, "_assets", provider.provider_entity.icon)
+        if not os.path.exists(icon_path):
+            icon_path = os.path.join(provider_path, "_asset", provider.provider_entity.icon)
 
         # 检测icon是否存在
         if not os.path.exists(icon_path):

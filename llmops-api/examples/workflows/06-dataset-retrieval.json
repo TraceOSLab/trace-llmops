@@ -1,0 +1,239 @@
+{
+  "nodes": [
+    {
+      "id": "bdbdc0a3-0eaa-53b7-9ade-0b100c1e44d4",
+      "node_type": "start",
+      "title": "输入知识库问题",
+      "description": "输入知识库问题",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "inputs": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": ""
+          },
+          "meta": {},
+          "description": ""
+        }
+      ]
+    },
+    {
+      "id": "6c0372a1-8c87-51cc-8668-4d6607eeaaf2",
+      "node_type": "dataset_retrieval",
+      "title": "检索现有知识库",
+      "description": "检索现有知识库",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "inputs": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "bdbdc0a3-0eaa-53b7-9ade-0b100c1e44d4",
+              "ref_var_name": "query"
+            }
+          },
+          "meta": {},
+          "description": ""
+        }
+      ],
+      "dataset_ids": [
+        "a07e38ec-8c45-46d1-89e5-cd29643088aa"
+      ],
+      "retrieval_config": {
+        "retrieval_strategy": "semantic",
+        "k": 2,
+        "score": 0.3
+      }
+    },
+    {
+      "id": "5bf3f353-d810-54ed-b110-623bbe49ee8e",
+      "node_type": "code",
+      "title": "统计并截取检索结果",
+      "description": "统计并截取检索结果",
+      "position": {
+        "x": 1800,
+        "y": 0
+      },
+      "inputs": [
+        {
+          "name": "documents",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "6c0372a1-8c87-51cc-8668-4d6607eeaaf2",
+              "ref_var_name": "combine_documents"
+            }
+          },
+          "meta": {},
+          "description": ""
+        }
+      ],
+      "outputs": [
+        {
+          "name": "context",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": ""
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "original_chars",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": 0
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "has_context",
+          "type": "boolean",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": false
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "truncated",
+          "type": "boolean",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": false
+          },
+          "meta": {},
+          "description": ""
+        }
+      ],
+      "code": "def main(params):\n    text = params['documents'].strip()\n    return {'context':text[:1200],'original_chars':len(text),'has_context':bool(text),'truncated':len(text)>1200}"
+    },
+    {
+      "id": "c9362bef-803e-5a00-a990-30cca849210a",
+      "node_type": "end",
+      "title": "输出检索证据",
+      "description": "输出检索证据",
+      "position": {
+        "x": 2700,
+        "y": 0
+      },
+      "outputs": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "bdbdc0a3-0eaa-53b7-9ade-0b100c1e44d4",
+              "ref_var_name": "query"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "context",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "5bf3f353-d810-54ed-b110-623bbe49ee8e",
+              "ref_var_name": "context"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "original_chars",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "5bf3f353-d810-54ed-b110-623bbe49ee8e",
+              "ref_var_name": "original_chars"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "has_context",
+          "type": "boolean",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "5bf3f353-d810-54ed-b110-623bbe49ee8e",
+              "ref_var_name": "has_context"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "truncated",
+          "type": "boolean",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "5bf3f353-d810-54ed-b110-623bbe49ee8e",
+              "ref_var_name": "truncated"
+            }
+          },
+          "meta": {},
+          "description": ""
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "7fe73e95-4028-50e1-af79-09a239e5fe42",
+      "source": "bdbdc0a3-0eaa-53b7-9ade-0b100c1e44d4",
+      "target": "6c0372a1-8c87-51cc-8668-4d6607eeaaf2",
+      "source_type": "start",
+      "target_type": "dataset_retrieval"
+    },
+    {
+      "id": "f0fe03f6-8585-5779-8403-0d69cb8e8cbc",
+      "source": "6c0372a1-8c87-51cc-8668-4d6607eeaaf2",
+      "target": "5bf3f353-d810-54ed-b110-623bbe49ee8e",
+      "source_type": "dataset_retrieval",
+      "target_type": "code"
+    },
+    {
+      "id": "21a68319-6f6f-5e18-9bb7-027ea48c8bf4",
+      "source": "5bf3f353-d810-54ed-b110-623bbe49ee8e",
+      "target": "c9362bef-803e-5a00-a990-30cca849210a",
+      "source_type": "code",
+      "target_type": "end"
+    }
+  ]
+}

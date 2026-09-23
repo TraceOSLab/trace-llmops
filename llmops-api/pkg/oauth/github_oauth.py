@@ -6,6 +6,7 @@
 @Author :   s.qiu@foxmail.com
 """
 import urllib.parse
+from contextlib import closing
 
 import requests
 
@@ -42,13 +43,15 @@ class GithubOAuth(OAuth):
         headers = {"Accept": "application/json"}
 
         # 获取数据 提取 access_token
-        resp = requests.post(self._ACCESS_TOKEN_URL, data=data, headers=headers)
-        resp.raise_for_status()
-        resp_json = resp.json()
+        with closing(requests.post(
+            self._ACCESS_TOKEN_URL, data=data, headers=headers, timeout=(5, 30),
+        )) as resp:
+            resp.raise_for_status()
+            resp_json = resp.json()
 
-        access_token = resp_json.get("access_token")
-        if not access_token:
-            raise ValueError(f"Github OAUTH授权失败{resp_json}")
+        access_token = resp_json.get("access_token") if isinstance(resp_json, dict) else None
+        if not isinstance(access_token, str) or not access_token.strip():
+            raise ValueError("Github OAuth 授权响应缺少有效凭证")
         return access_token
 
     def get_raw_user_info(self, token: str) -> dict:
@@ -56,19 +59,25 @@ class GithubOAuth(OAuth):
         headers = {"Authorization": f"token {token}"}
 
         # 获取数据
-        resp = requests.get(self._USER_INFO_URL, headers=headers)
-        resp.raise_for_status()
-        raw_info = resp.json()
+        with closing(requests.get(self._USER_INFO_URL, headers=headers, timeout=(5, 30))) as resp:
+            resp.raise_for_status()
+            raw_info = resp.json()
+        if not isinstance(raw_info, dict):
+            raise ValueError("Github OAuth 用户信息格式错误")
 
         # 获取用户的邮箱信息
-        email_resp = requests.get(self._EMAIL_INFO_URL, headers=headers)
-        email_resp.raise_for_status()
-        email_info = email_resp.json()
+        with closing(requests.get(self._EMAIL_INFO_URL, headers=headers, timeout=(5, 30))) as email_resp:
+            email_resp.raise_for_status()
+            email_info = email_resp.json()
+        if not isinstance(email_info, list):
+            raise ValueError("Github OAuth 邮箱信息格式错误")
 
         primary_email = next((email for email in email_info
-                              if email.get("primary") is True
+                              if isinstance(email, dict)
+                              and email.get("primary") is True
                               and email.get("verified") is True
-                              and email.get("email")), None)
+                              and isinstance(email.get("email"), str)
+                              and email["email"].strip()), None)
         if primary_email is None:
             raise ValueError("Github OAuth 需要已验证的主邮箱")
         return {**raw_info, "email": primary_email["email"]}

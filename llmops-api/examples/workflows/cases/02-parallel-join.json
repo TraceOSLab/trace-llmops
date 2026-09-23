@@ -1,0 +1,30 @@
+[
+  {
+    "name": "三路汇合",
+    "inputs": {
+      "text": "  workflow  ",
+      "number": 7
+    },
+    "expected": {
+      "cleaned": "workflow",
+      "length": 8,
+      "squared": 49
+    },
+    "checks": [
+      "time非空",
+      "7个节点各输出一次，结束节点最后输出"
+    ]
+  },
+  {
+    "name": "空文本和负数",
+    "inputs": {
+      "text": "  ",
+      "number": -3
+    },
+    "expected": {
+      "cleaned": "",
+      "length": 0,
+      "squared": 9
+    }
+  }
+]

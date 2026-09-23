@@ -1,0 +1,53 @@
+[
+  {
+    "name": "会员折扣与省略可选项",
+    "inputs": {
+      "product": "测试键盘",
+      "quantity": 2,
+      "unit_price": 99.5,
+      "vip": true
+    },
+    "expected": {
+      "subtotal": 199.0,
+      "total": 179.1,
+      "discount": 0.9,
+      "note": "无备注",
+      "vip": true,
+      "currency": "CNY"
+    }
+  },
+  {
+    "name": "非会员与显式备注",
+    "inputs": {
+      "product": " 测试鼠标 ",
+      "quantity": 1,
+      "unit_price": 50.0,
+      "vip": false,
+      "note": " 周末送达 "
+    },
+    "expected": {
+      "total": 50.0,
+      "note": "周末送达",
+      "vip": false
+    }
+  },
+  {
+    "name": "数量不合法",
+    "inputs": {
+      "product": "测试键盘",
+      "quantity": 0,
+      "unit_price": 99.5,
+      "vip": true
+    },
+    "expected_failure_node": "计算金额并校验输入"
+  },
+  {
+    "name": "缺少必填项",
+    "inputs": {
+      "product": "测试键盘",
+      "unit_price": 99.5,
+      "vip": true
+    },
+    "expected_failure_node": "开始输入订单参数"
+  }
+]

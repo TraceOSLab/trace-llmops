@@ -1,0 +1,182 @@
+{
+  "nodes": [
+    {
+      "id": "30706f88-56e2-5243-9ed7-85737664f516",
+      "node_type": "start",
+      "title": "开始",
+      "description": "开始",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "inputs": [
+        {
+          "name": "case_name",
+          "type": "string",
+          "required": false,
+          "value": {
+            "type": "generated",
+            "content": ""
+          },
+          "meta": {},
+          "description": ""
+        }
+      ]
+    },
+    {
+      "id": "5770f4e8-c40a-515a-aedc-58134920e63f",
+      "node_type": "http_request",
+      "title": "请求不存在的待办",
+      "description": "请求不存在的待办",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "url": "https://jsonplaceholder.typicode.com/todos/999999999",
+      "method": "get",
+      "inputs": []
+    },
+    {
+      "id": "2ad476ba-15a7-5b2d-845c-f7ad445480ab",
+      "node_type": "code",
+      "title": "识别预期404",
+      "description": "识别预期404",
+      "position": {
+        "x": 1800,
+        "y": 0
+      },
+      "inputs": [
+        {
+          "name": "status_code",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "5770f4e8-c40a-515a-aedc-58134920e63f",
+              "ref_var_name": "status_code"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "5770f4e8-c40a-515a-aedc-58134920e63f",
+              "ref_var_name": "text"
+            }
+          },
+          "meta": {},
+          "description": ""
+        }
+      ],
+      "outputs": [
+        {
+          "name": "expected_error_observed",
+          "type": "boolean",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": false
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "body_preview",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": ""
+          },
+          "meta": {},
+          "description": ""
+        }
+      ],
+      "code": "def main(params):\n    return {'expected_error_observed':params['status_code'] == 404, 'body_preview':params['text'][:200]}"
+    },
+    {
+      "id": "3dfb04ec-f94d-5abd-8e28-19e50f1bb262",
+      "node_type": "end",
+      "title": "输出404检查结果",
+      "description": "输出404检查结果",
+      "position": {
+        "x": 2700,
+        "y": 0
+      },
+      "outputs": [
+        {
+          "name": "http_status",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "5770f4e8-c40a-515a-aedc-58134920e63f",
+              "ref_var_name": "status_code"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "expected_error_observed",
+          "type": "boolean",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "2ad476ba-15a7-5b2d-845c-f7ad445480ab",
+              "ref_var_name": "expected_error_observed"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "body_preview",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "2ad476ba-15a7-5b2d-845c-f7ad445480ab",
+              "ref_var_name": "body_preview"
+            }
+          },
+          "meta": {},
+          "description": ""
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "8d0abb5a-1846-57d2-b286-dde787a2178e",
+      "source": "30706f88-56e2-5243-9ed7-85737664f516",
+      "target": "5770f4e8-c40a-515a-aedc-58134920e63f",
+      "source_type": "start",
+      "target_type": "http_request"
+    },
+    {
+      "id": "fbc55b1c-b67d-5d66-8590-5d8f57802373",
+      "source": "5770f4e8-c40a-515a-aedc-58134920e63f",
+      "target": "2ad476ba-15a7-5b2d-845c-f7ad445480ab",
+      "source_type": "http_request",
+      "target_type": "code"
+    },
+    {
+      "id": "7c9fc96b-f1e4-5671-92a2-9941a2642f9b",
+      "source": "2ad476ba-15a7-5b2d-845c-f7ad445480ab",
+      "target": "3dfb04ec-f94d-5abd-8e28-19e50f1bb262",
+      "source_type": "code",
+      "target_type": "end"
+    }
+  ]
+}

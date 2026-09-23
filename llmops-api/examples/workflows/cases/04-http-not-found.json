@@ -1,0 +1,13 @@
+[
+  {
+    "name": "404业务结果",
+    "inputs": {},
+    "expected": {
+      "http_status": 404,
+      "expected_error_observed": true
+    },
+    "checks": [
+      "工作流仍应到达结束节点；连接异常则不属于这个预期404场景"
+    ]
+  }
+]

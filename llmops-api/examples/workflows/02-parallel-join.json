@@ -1,0 +1,382 @@
+{
+  "nodes": [
+    {
+      "id": "61cd6186-93e0-530a-b70b-fccb9cfc516f",
+      "node_type": "start",
+      "title": "开始",
+      "description": "开始",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "inputs": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": ""
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "number",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": 0
+          },
+          "meta": {},
+          "description": ""
+        }
+      ]
+    },
+    {
+      "id": "58bd6c70-ea3a-5e62-a955-c80b06117d05",
+      "node_type": "code",
+      "title": "文本分支第一步",
+      "description": "文本分支第一步",
+      "position": {
+        "x": 900,
+        "y": -700
+      },
+      "inputs": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "61cd6186-93e0-530a-b70b-fccb9cfc516f",
+              "ref_var_name": "text"
+            }
+          },
+          "meta": {},
+          "description": ""
+        }
+      ],
+      "outputs": [
+        {
+          "name": "cleaned",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": ""
+          },
+          "meta": {},
+          "description": ""
+        }
+      ],
+      "code": "def main(params):\n    return {'cleaned':params['text'].strip()}"
+    },
+    {
+      "id": "35f648ba-076d-5b6c-a759-d34472dc9b45",
+      "node_type": "code",
+      "title": "文本分支第二步",
+      "description": "文本分支第二步",
+      "position": {
+        "x": 1800,
+        "y": -700
+      },
+      "inputs": [
+        {
+          "name": "cleaned",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "58bd6c70-ea3a-5e62-a955-c80b06117d05",
+              "ref_var_name": "cleaned"
+            }
+          },
+          "meta": {},
+          "description": ""
+        }
+      ],
+      "outputs": [
+        {
+          "name": "length",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": 0
+          },
+          "meta": {},
+          "description": ""
+        }
+      ],
+      "code": "def main(params):\n    return {'length':len(params['cleaned'])}"
+    },
+    {
+      "id": "1944e0ab-63fe-5df0-9e6c-65e61b0a7dbb",
+      "node_type": "code",
+      "title": "数字分支",
+      "description": "数字分支",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "inputs": [
+        {
+          "name": "number",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "61cd6186-93e0-530a-b70b-fccb9cfc516f",
+              "ref_var_name": "number"
+            }
+          },
+          "meta": {},
+          "description": ""
+        }
+      ],
+      "outputs": [
+        {
+          "name": "squared",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": 0
+          },
+          "meta": {},
+          "description": ""
+        }
+      ],
+      "code": "def main(params):\n    return {'squared':params['number'] ** 2}"
+    },
+    {
+      "id": "229906f6-ab00-56c6-b74f-430235d7fc10",
+      "node_type": "tool",
+      "title": "时间工具分支",
+      "description": "时间工具分支",
+      "position": {
+        "x": 900,
+        "y": 700
+      },
+      "tool_type": "builtin_tool",
+      "provider_id": "time",
+      "tool_id": "current_time",
+      "params": {},
+      "inputs": []
+    },
+    {
+      "id": "8d6507d0-4bd6-5c78-84ee-c4200b1ef7fe",
+      "node_type": "template_transform",
+      "title": "等待三路分支完成",
+      "description": "等待三路分支完成",
+      "position": {
+        "x": 2700,
+        "y": 0
+      },
+      "inputs": [
+        {
+          "name": "cleaned",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "58bd6c70-ea3a-5e62-a955-c80b06117d05",
+              "ref_var_name": "cleaned"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "length",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "35f648ba-076d-5b6c-a759-d34472dc9b45",
+              "ref_var_name": "length"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "squared",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "1944e0ab-63fe-5df0-9e6c-65e61b0a7dbb",
+              "ref_var_name": "squared"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "time",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "229906f6-ab00-56c6-b74f-430235d7fc10",
+              "ref_var_name": "text"
+            }
+          },
+          "meta": {},
+          "description": ""
+        }
+      ],
+      "template": "文本={{cleaned}}；字符数={{length}}；平方={{squared}}；时间={{time}}"
+    },
+    {
+      "id": "98e61b6a-1373-51a0-9469-689f6701097c",
+      "node_type": "end",
+      "title": "结束",
+      "description": "结束",
+      "position": {
+        "x": 3600,
+        "y": 0
+      },
+      "outputs": [
+        {
+          "name": "summary",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "8d6507d0-4bd6-5c78-84ee-c4200b1ef7fe",
+              "ref_var_name": "output"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "cleaned",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "58bd6c70-ea3a-5e62-a955-c80b06117d05",
+              "ref_var_name": "cleaned"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "length",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "35f648ba-076d-5b6c-a759-d34472dc9b45",
+              "ref_var_name": "length"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "squared",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "1944e0ab-63fe-5df0-9e6c-65e61b0a7dbb",
+              "ref_var_name": "squared"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "time",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "229906f6-ab00-56c6-b74f-430235d7fc10",
+              "ref_var_name": "text"
+            }
+          },
+          "meta": {},
+          "description": ""
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "c2b252c1-07a2-5942-bd95-c095b9d5b765",
+      "source": "61cd6186-93e0-530a-b70b-fccb9cfc516f",
+      "target": "58bd6c70-ea3a-5e62-a955-c80b06117d05",
+      "source_type": "start",
+      "target_type": "code"
+    },
+    {
+      "id": "d4938a54-c522-5b99-9a7d-9a6e219d2d76",
+      "source": "58bd6c70-ea3a-5e62-a955-c80b06117d05",
+      "target": "35f648ba-076d-5b6c-a759-d34472dc9b45",
+      "source_type": "code",
+      "target_type": "code"
+    },
+    {
+      "id": "daa17ca2-da6f-509b-813d-9bca361fe059",
+      "source": "61cd6186-93e0-530a-b70b-fccb9cfc516f",
+      "target": "1944e0ab-63fe-5df0-9e6c-65e61b0a7dbb",
+      "source_type": "start",
+      "target_type": "code"
+    },
+    {
+      "id": "380fc2a3-1e6b-50d4-8a53-af71735db6cf",
+      "source": "61cd6186-93e0-530a-b70b-fccb9cfc516f",
+      "target": "229906f6-ab00-56c6-b74f-430235d7fc10",
+      "source_type": "start",
+      "target_type": "tool"
+    },
+    {
+      "id": "5e177af9-69d4-5686-8633-205641e445ac",
+      "source": "35f648ba-076d-5b6c-a759-d34472dc9b45",
+      "target": "8d6507d0-4bd6-5c78-84ee-c4200b1ef7fe",
+      "source_type": "code",
+      "target_type": "template_transform"
+    },
+    {
+      "id": "ce89de7a-06ef-5162-8147-689b9eaf870f",
+      "source": "1944e0ab-63fe-5df0-9e6c-65e61b0a7dbb",
+      "target": "8d6507d0-4bd6-5c78-84ee-c4200b1ef7fe",
+      "source_type": "code",
+      "target_type": "template_transform"
+    },
+    {
+      "id": "61200061-5610-50a3-aac1-48505468ce04",
+      "source": "229906f6-ab00-56c6-b74f-430235d7fc10",
+      "target": "8d6507d0-4bd6-5c78-84ee-c4200b1ef7fe",
+      "source_type": "tool",
+      "target_type": "template_transform"
+    },
+    {
+      "id": "44fee2c3-83fe-5075-b91d-25f3d6d4b27f",
+      "source": "8d6507d0-4bd6-5c78-84ee-c4200b1ef7fe",
+      "target": "98e61b6a-1373-51a0-9469-689f6701097c",
+      "source_type": "template_transform",
+      "target_type": "end"
+    }
+  ]
+}

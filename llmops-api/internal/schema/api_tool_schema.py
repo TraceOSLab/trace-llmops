@@ -53,6 +53,10 @@ class CreateApiToolReq(FlaskForm):
                 raise ValidationError("headers中的元素都应为字典")
             if set(header.keys()) != {"key", "value"}:
                 raise ValidationError("headers中的每个元素有且只有key&value两个属性")
+            if (not isinstance(header["key"], str) or not header["key"].strip()
+                    or not isinstance(header["value"], str)
+                    or any(char in header["key"] + header["value"] for char in "\r\n")):
+                raise ValidationError("headers的key和value必须为合法字符串")
 
 
 class UpdateApiToolProviderReq(CreateApiToolReq):

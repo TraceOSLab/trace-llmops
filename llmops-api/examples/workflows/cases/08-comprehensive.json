@@ -1,0 +1,25 @@
+[
+  {
+    "name": "完整链路",
+    "inputs": {
+      "query": "请结合知识库介绍一个有依据的知识点，并说明示例待办是否完成。"
+    },
+    "expected": {
+      "task_id": 1,
+      "completed": false,
+      "http_status_code": 200,
+      "passed": true
+    },
+    "checks": [
+      "10个节点各输出一次",
+      "current_time非空",
+      "answer回答问题并说明任务状态",
+      "passed只验证结构和任务字段，答案准确性需要人工检查"
+    ]
+  },
+  {
+    "name": "缺少输入",
+    "inputs": {},
+    "expected_failure_node": "开始"
+  }
+]

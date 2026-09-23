@@ -1,0 +1,410 @@
+{
+  "nodes": [
+    {
+      "id": "1d18e3a8-e0d0-5fa0-b712-3840e37c5318",
+      "node_type": "start",
+      "title": "开始输入订单参数",
+      "description": "开始输入订单参数",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "inputs": [
+        {
+          "name": "product",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": ""
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "quantity",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": 0
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "unit_price",
+          "type": "float",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": 0.0
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "vip",
+          "type": "boolean",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": false
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "note",
+          "type": "string",
+          "required": false,
+          "value": {
+            "type": "generated",
+            "content": ""
+          },
+          "meta": {},
+          "description": ""
+        }
+      ]
+    },
+    {
+      "id": "b3d09abf-a12e-5f8d-8063-7ae460aaf8b5",
+      "node_type": "code",
+      "title": "计算金额并校验输入",
+      "description": "计算金额并校验输入",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "inputs": [
+        {
+          "name": "product",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "1d18e3a8-e0d0-5fa0-b712-3840e37c5318",
+              "ref_var_name": "product"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "quantity",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "1d18e3a8-e0d0-5fa0-b712-3840e37c5318",
+              "ref_var_name": "quantity"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "unit_price",
+          "type": "float",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "1d18e3a8-e0d0-5fa0-b712-3840e37c5318",
+              "ref_var_name": "unit_price"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "vip",
+          "type": "boolean",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "1d18e3a8-e0d0-5fa0-b712-3840e37c5318",
+              "ref_var_name": "vip"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "note",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "1d18e3a8-e0d0-5fa0-b712-3840e37c5318",
+              "ref_var_name": "note"
+            }
+          },
+          "meta": {},
+          "description": ""
+        }
+      ],
+      "outputs": [
+        {
+          "name": "product",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": ""
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "note",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": ""
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "subtotal",
+          "type": "float",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": 0.0
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "total",
+          "type": "float",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": 0.0
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "discount",
+          "type": "float",
+          "required": true,
+          "value": {
+            "type": "generated",
+            "content": 0.0
+          },
+          "meta": {},
+          "description": ""
+        }
+      ],
+      "code": "def main(params):\n    import math\n    product = params['product'].strip()\n    quantity = params['quantity']\n    price = params['unit_price']\n    if not product or quantity <= 0 or not math.isfinite(price) or price < 0:\n        raise ValueError('商品名不能为空，数量必须为正数，单价必须为非负有限数')\n    subtotal = round(quantity * price, 2)\n    discount = 0.9 if params['vip'] else 1.0\n    return {'product':product, 'note':params['note'].strip() or '无备注', 'subtotal':subtotal, 'discount':discount, 'total':round(subtotal * discount, 2)}"
+    },
+    {
+      "id": "090f87a8-af3b-5ee9-9ba2-41e22c363dc4",
+      "node_type": "template_transform",
+      "title": "格式化订单摘要",
+      "description": "格式化订单摘要",
+      "position": {
+        "x": 1800,
+        "y": 0
+      },
+      "inputs": [
+        {
+          "name": "product",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "b3d09abf-a12e-5f8d-8063-7ae460aaf8b5",
+              "ref_var_name": "product"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "quantity",
+          "type": "int",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "1d18e3a8-e0d0-5fa0-b712-3840e37c5318",
+              "ref_var_name": "quantity"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "total",
+          "type": "float",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "b3d09abf-a12e-5f8d-8063-7ae460aaf8b5",
+              "ref_var_name": "total"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "note",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "b3d09abf-a12e-5f8d-8063-7ae460aaf8b5",
+              "ref_var_name": "note"
+            }
+          },
+          "meta": {},
+          "description": ""
+        }
+      ],
+      "template": "商品：{{product}}；数量：{{quantity}}；应付：{{\"%.2f\"|format(total)}}；备注：{{note}}"
+    },
+    {
+      "id": "3195f79d-a9b8-5ec6-a0f9-c53c7dc1b37c",
+      "node_type": "end",
+      "title": "输出金额与摘要",
+      "description": "输出金额与摘要",
+      "position": {
+        "x": 2700,
+        "y": 0
+      },
+      "outputs": [
+        {
+          "name": "summary",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "090f87a8-af3b-5ee9-9ba2-41e22c363dc4",
+              "ref_var_name": "output"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "subtotal",
+          "type": "float",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "b3d09abf-a12e-5f8d-8063-7ae460aaf8b5",
+              "ref_var_name": "subtotal"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "total",
+          "type": "float",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "b3d09abf-a12e-5f8d-8063-7ae460aaf8b5",
+              "ref_var_name": "total"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "discount",
+          "type": "float",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "b3d09abf-a12e-5f8d-8063-7ae460aaf8b5",
+              "ref_var_name": "discount"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "note",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "b3d09abf-a12e-5f8d-8063-7ae460aaf8b5",
+              "ref_var_name": "note"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "vip",
+          "type": "boolean",
+          "required": true,
+          "value": {
+            "type": "ref",
+            "content": {
+              "ref_node_id": "1d18e3a8-e0d0-5fa0-b712-3840e37c5318",
+              "ref_var_name": "vip"
+            }
+          },
+          "meta": {},
+          "description": ""
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "required": true,
+          "value": {
+            "type": "literal",
+            "content": "CNY"
+          },
+          "meta": {},
+          "description": ""
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "a151a016-8549-51fb-a06e-8323b30a92ab",
+      "source": "1d18e3a8-e0d0-5fa0-b712-3840e37c5318",
+      "target": "b3d09abf-a12e-5f8d-8063-7ae460aaf8b5",
+      "source_type": "start",
+      "target_type": "code"
+    },
+    {
+      "id": "4e675fde-1c0a-5930-9dd2-5acfae53cb10",
+      "source": "b3d09abf-a12e-5f8d-8063-7ae460aaf8b5",
+      "target": "090f87a8-af3b-5ee9-9ba2-41e22c363dc4",
+      "source_type": "code",
+      "target_type": "template_transform"
+    },
+    {
+      "id": "5a1c354b-fe09-5a7a-94b1-f94cacb8f142",
+      "source": "090f87a8-af3b-5ee9-9ba2-41e22c363dc4",
+      "target": "3195f79d-a9b8-5ec6-a0f9-c53c7dc1b37c",
+      "source_type": "template_transform",
+      "target_type": "end"
+    }
+  ]
+}
