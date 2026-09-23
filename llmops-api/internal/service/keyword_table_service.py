@@ -13,7 +13,7 @@ from injector import inject
 from redis import Redis
 
 from internal.entity.cache_entity import LOCK_KEYWORD_TABLE_UPDATE_KEYWORD_TABLE, LOCK_EXPIRE_TIME
-from internal.model import KeywordTable, Segment
+from internal.model import Dataset, KeywordTable, Segment
 from internal.service import BaseService
 from pkg.sqlalchemy import SQLAlchemy
 
@@ -25,10 +25,10 @@ class KeywordTableService(BaseService):
     db: SQLAlchemy
     redis_client: Redis
 
-    def get_keyword_table_from_dataset_id(self, dataset_id) -> KeywordTable:
+    def get_keyword_table_from_dataset_id(self, dataset_id, *, create: bool = True) -> KeywordTable | None:
         """获取知识库的 关键词表"""
         keyword_table = self.db.session.query(KeywordTable).filter(KeywordTable.dataset_id == dataset_id).one_or_none()
-        if keyword_table is None:
+        if keyword_table is None and create:
             keyword_table = self.create(KeywordTable, dataset_id=dataset_id, keyword_table={})
 
         return keyword_table
@@ -38,7 +38,10 @@ class KeywordTableService(BaseService):
         # 上锁避免并发时拿到错误数据
         cache_key = LOCK_KEYWORD_TABLE_UPDATE_KEYWORD_TABLE.format(dataset_id=dataset_id)
         with self.redis_client.lock(cache_key, timeout=LOCK_EXPIRE_TIME):
-            keyword_table_record = self.get_keyword_table_from_dataset_id(dataset_id)
+            # 清理已删除知识库时不能反向创建一条孤立关键词表记录。
+            keyword_table_record = self.get_keyword_table_from_dataset_id(dataset_id, create=False)
+            if keyword_table_record is None:
+                return
             keyword_table = keyword_table_record.keyword_table.copy()
 
             segment_ids_to_delete = set([str(segment_id) for segment_id in segment_ids])
@@ -63,6 +66,9 @@ class KeywordTableService(BaseService):
         # 知识库新增关键词 上锁避免并发时拿到错误数据
         cache_key = LOCK_KEYWORD_TABLE_UPDATE_KEYWORD_TABLE.format(dataset_id=dataset_id)
         with self.redis_client.lock(cache_key, timeout=LOCK_EXPIRE_TIME):
+            # 后台索引任务可能滞后于删除请求；不存在主知识库时直接放弃派生写入。
+            if self.db.session.query(Dataset.id).filter(Dataset.id == dataset_id).one_or_none() is None:
+                return
             # 获取指定关键词表
             keyword_table_record = self.get_keyword_table_from_dataset_id(dataset_id)
             keyword_table = {field: set(value) for field, value in keyword_table_record.keyword_table.items()}

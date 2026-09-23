@@ -111,12 +111,11 @@ class DatasetService(BaseService):
             raise NotFoundException("知识库不存在")
 
         try:
-            self.delete(dataset)
-            with self.db.auto_commit():
-                self.db.session.query(AppDatasetJoin).filter(AppDatasetJoin.dataset_id == dataset_id).delete()
-
-            # 异步任务执行后续操作
+            # 派生存储先清理成功，才删除主记录，避免向量库故障后留下不可管理的残留。
             self.indexing_service.delete_dataset(dataset_id)
+            with self.db.auto_commit():
+                self.db.session.delete(dataset)
+                self.db.session.query(AppDatasetJoin).filter(AppDatasetJoin.dataset_id == dataset_id).delete()
 
         except Exception as e:
             logging.exception(f"删除知识库失败, dataset_id: {dataset_id}, 错误信息: {str(e)}")

@@ -7,7 +7,7 @@
 """
 
 import logging
-import random
+import secrets
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -55,7 +55,8 @@ class DocumentService(BaseService):
         if dataset is None or dataset.account_id != account.id:
             raise ForbiddenException("知识库不存在或无权限")
 
-        # 提取文件并校验文件权限与扩展
+        # 提取文件并校验文件权限与扩展。重复文件 ID 只处理一次。
+        upload_file_ids = list(dict.fromkeys(upload_file_ids))
         upload_files = (
             self.db.session.query(UploadFile)
             .filter(
@@ -64,50 +65,58 @@ class DocumentService(BaseService):
             .all()
         )
 
-        # 保存允许处理的类型
-        upload_files = [
-            upload_file
+        if len(upload_files) != len(upload_file_ids) or any(
+            upload_file.extension.lower() not in ALLOWED_DOCUMENT_EXTENSION
             for upload_file in upload_files
-            if upload_file.extension.lower() in ALLOWED_DOCUMENT_EXTENSION
-        ]
-
-        if len(upload_files) == 0:
+        ):
             logging.warning(
-                f"上传文档列表未解析到合法文件，account_id: {account.id}, dataset_id: {dataset_id}, upload_file_ids: {upload_file_ids}"
+                "上传文档列表包含不存在、无权限或不支持的文件，account_id=%s, dataset_id=%s",
+                account.id, dataset_id,
             )
-            raise FailException("未解析到合法文件")
+            raise FailException("上传文件不存在或类型不支持")
 
         # 创建批次与处理规则并记录数据库
-        batch = time.strftime("%Y%m%d%H%M%S") + str(random.randint(100000, 999999))
-        process_rule = self.create(
-            ProcessRule,
-            account_id=account.id,
-            dataset_id=dataset_id,
-            mode=process_type,
-            rule=rule,
-        )
-
-        # 获取当前知识库最新文档的位置
-        position = self.get_latest_document_position(dataset_id)
-
-        # 遍历所有合法的上传文件列表并记录数据
+        batch = f"{time.strftime('%Y%m%d%H%M%S')}{secrets.token_hex(4)}"
         documents = []
-        for upload_file in upload_files:
-            position += 1
-            document = self.create(
-                Document,
-                account_id=account.id,
-                dataset_id=dataset_id,
-                upload_file_id=upload_file.id,
-                process_rule_id=process_rule.id,
-                batch=batch,
-                name=upload_file.name,
-                position=position,
+        with self.db.auto_commit():
+            # 锁住知识库行，避免并发批次拿到相同 position。
+            dataset = self.db.session.query(Dataset).filter_by(
+                id=dataset_id, account_id=account.id,
+            ).with_for_update().one_or_none()
+            if dataset is None:
+                raise ForbiddenException("知识库不存在或无权限")
+            process_rule = ProcessRule(
+                account_id=account.id, dataset_id=dataset_id,
+                mode=process_type, rule=rule,
             )
-            documents.append(document)
+            self.db.session.add(process_rule)
+            self.db.session.flush()
+            position = self.get_latest_document_position(dataset_id)
+            for upload_file in upload_files:
+                position += 1
+                document = Document(
+                    account_id=account.id, dataset_id=dataset_id,
+                    upload_file_id=upload_file.id, process_rule_id=process_rule.id,
+                    batch=batch, name=upload_file.name, position=position,
+                )
+                self.db.session.add(document)
+                documents.append(document)
+            self.db.session.flush()
 
-        # 调用异步任务，完成处理文档操作
-        build_documents.delay([document.id for document in documents])
+        try:
+            build_documents.delay([str(document.id) for document in documents])
+        except Exception:
+            logging.exception("文档索引任务派发失败，batch=%s", batch)
+            with self.db.auto_commit():
+                self.db.session.query(Document).filter(
+                    Document.id.in_([document.id for document in documents]),
+                    Document.status == DocumentStatus.WAITING,
+                ).update({
+                    "status": DocumentStatus.ERROR,
+                    "error": "文档索引任务派发失败",
+                    "stopped_at": datetime.now(),
+                }, synchronize_session=False)
+            raise FailException("文档索引任务派发失败") from None
 
         # 返回文档列表与处理批次
         return documents, batch
@@ -186,14 +195,23 @@ class DocumentService(BaseService):
         if cache_value is not None:
             raise FailException("当前文档正在修改状态，请稍后重试。")
 
-        # 更新文档
-        self.update(
-            document, enabled=enabled, disabled_at=None if enabled else datetime.now()
-        )
-        self.redis_client.setex(cache_key, LOCK_EXPIRE_TIME, 1)
-
-        # 启用异步任务完成 关键词 片段 向量等修改
-        update_document_enabled.delay(document_id)
+        try:
+            # 先取得锁再提交状态；派发失败则还原状态并释放锁。
+            self.redis_client.setex(cache_key, LOCK_EXPIRE_TIME, 1)
+            self.update(
+                document, enabled=enabled, disabled_at=None if enabled else datetime.now()
+            )
+            update_document_enabled.delay(str(document_id))
+        except Exception:
+            logging.exception("文档启停任务派发失败，document_id=%s", document_id)
+            try:
+                self.update(
+                    document, enabled=not enabled,
+                    disabled_at=None if not enabled else datetime.now(),
+                )
+            finally:
+                self.redis_client.delete(cache_key)
+            raise FailException("文档状态更新任务派发失败") from None
 
         return document
 
@@ -210,9 +228,13 @@ class DocumentService(BaseService):
         if document.status not in [DocumentStatus.COMPLETED, DocumentStatus.ERROR]:
             raise FailException("当前文档处于不可删除状态，请稍后重试。")
 
+        # 任务只在主记录已经删除后处理派生数据；派发失败时不删除主记录。
+        try:
+            delete_document.delay(str(dataset_id), str(document_id))
+        except Exception:
+            logging.exception("文档删除任务派发失败，document_id=%s", document_id)
+            raise FailException("文档删除任务派发失败") from None
         self.delete(document)
-        # 启用异步任务完成 关键词 片段 向量等删除
-        delete_document.delay(dataset_id, document_id)
         return document
 
     def get_documents_status(

@@ -13,7 +13,8 @@ from langchain_core.documents import Document as LCDocument
 from langchain_core.retrievers import BaseRetriever
 from pydantic import Field
 
-from internal.model import KeywordTable, Segment
+from internal.entity.dataset_entity import DocumentStatus, SegmentStatus
+from internal.model import Document, KeywordTable, Segment
 from internal.service import JiebaService
 from pkg.sqlalchemy import SQLAlchemy
 
@@ -54,7 +55,19 @@ class FullTextRetriever(BaseRetriever):
         top_k_ids = id_counter.most_common(k)
 
         # 检索数据库获取片段列表
-        segments = self.db.session.query(Segment).filter(Segment.id.in_([id for id, _ in top_k_ids])).all()
+        # 关键词表是派生数据，可能比片段状态更晚更新；数据库状态决定是否可返回。
+        segments = (
+            self.db.session.query(Segment)
+            .join(Document, Document.id == Segment.document_id)
+            .filter(
+                Segment.id.in_([id for id, _ in top_k_ids]),
+                Segment.status == SegmentStatus.COMPLETED,
+                Segment.enabled.is_(True),
+                Document.status == DocumentStatus.COMPLETED,
+                Document.enabled.is_(True),
+            )
+            .all()
+        )
         segment_dict = {str(segment.id): segment for segment in segments}
 
         # 根据频率进行排序

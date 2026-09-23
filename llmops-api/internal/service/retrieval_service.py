@@ -18,10 +18,15 @@ from pydantic import BaseModel, Field
 from sqlalchemy import update
 
 from internal.core.agent.entities.agent_entity import DATASET_RETRIEVAL_TOOL_NAME
-from internal.entity.dataset_entity import RetrievalStrategy, RetrievalSource
+from internal.entity.dataset_entity import (
+    DocumentStatus,
+    RetrievalStrategy,
+    RetrievalSource,
+    SegmentStatus,
+)
 from internal.exception import NotFoundException
 from internal.lib.helper import combine_documents
-from internal.model import Dataset, DatasetQuery, Segment
+from internal.model import Dataset, DatasetQuery, Document, Segment
 from internal.service.base_service import BaseService
 from internal.service.jieba_service import JiebaService
 from internal.service.vector_database_service import VectorDatabaseService
@@ -57,7 +62,7 @@ class RetrievalService(BaseService):
         )
         if datasets is None or len(datasets) == 0:
             raise NotFoundException("当前无知识库可进行检索")
-        dataset_ids = [datasets.id for datasets in datasets]
+        dataset_ids = [dataset.id for dataset in datasets]
 
         # 构建不同种类检索器
         from internal.core.retrievers import SemanticRetriever, FullTextRetriever
@@ -88,6 +93,18 @@ class RetrievalService(BaseService):
         else:
             lc_documents = hybrid_retriever.invoke(query)[:k]
 
+        # 向量库删除或启停同步可能滞后。最终以 PostgreSQL 中仍可见的片段为准，
+        # 也避免已经删除的向量参与查询记录与命中计数。
+        visible_segments = self._get_visible_segments(
+            [item.metadata.get("segment_id") for item in lc_documents],
+            dataset_ids,
+            account_id,
+        )
+        lc_documents = [
+            item for item in lc_documents
+            if item.metadata.get("segment_id") in visible_segments
+        ]
+
         # 知识库查询记录 存储唯一记录
         unique_dataset_ids = list(
             set(str(lc_document.metadata["dataset_id"]) for lc_document in lc_documents)
@@ -104,22 +121,45 @@ class RetrievalService(BaseService):
             )
 
         # 更新片段的命中次数 召回次数
-        with self.db.auto_commit():
-            stmt = (
-                update(Segment)
-                .where(
-                    Segment.id.in_(
-                        [
-                            lc_document.metadata["segment_id"]
-                            for lc_document in lc_documents
-                        ]
-                    )
-                )
-                .values(hit_count=Segment.hit_count + 1)
-            )
-            self.db.session.execute(stmt)
+        self._increment_hits(list(visible_segments.values()))
 
         return lc_documents
+
+    def _get_visible_segments(
+        self,
+        segment_ids: list[str | UUID | None],
+        dataset_ids: list[UUID],
+        account_id: UUID,
+    ) -> dict[str, UUID]:
+        """以主库状态过滤来自关键词表或向量库的候选片段。"""
+        segment_ids = [segment_id for segment_id in segment_ids if segment_id]
+        if not segment_ids:
+            return {}
+        records = (
+            self.db.session.query(Segment.id)
+            .join(Document, Document.id == Segment.document_id)
+            .filter(
+                Segment.id.in_(segment_ids),
+                Segment.dataset_id.in_(dataset_ids),
+                Segment.account_id == account_id,
+                Segment.status == SegmentStatus.COMPLETED,
+                Segment.enabled.is_(True),
+                Document.status == DocumentStatus.COMPLETED,
+                Document.enabled.is_(True),
+            )
+            .all()
+        )
+        return {str(record.id): record.id for record in records}
+
+    def _increment_hits(self, segment_ids: list[UUID]) -> None:
+        if not segment_ids:
+            return
+        with self.db.auto_commit():
+            self.db.session.execute(
+                update(Segment)
+                .where(Segment.id.in_(segment_ids))
+                .values(hit_count=Segment.hit_count + 1)
+            )
 
     def create_langchain_tool_from_search(
         self,

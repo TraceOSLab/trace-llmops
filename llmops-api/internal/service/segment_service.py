@@ -133,7 +133,7 @@ class SegmentService(BaseService):
             document_character_count, document_token_count = self.db.session.query(
                 func.coalesce(func.sum(Segment.character_count), 0),
                 func.coalesce(func.sum(Segment.token_count), 0)
-            ).first()
+            ).filter(Segment.document_id == document_id).first()
             self.update(document, character_count=document_character_count, token_count=document_token_count)
 
             # 更新知识库的关键词表信息
@@ -195,7 +195,7 @@ class SegmentService(BaseService):
                 document_character_count, document_token_count = self.db.session.query(
                     func.coalesce(func.sum(Segment.character_count), 0),
                     func.coalesce(func.sum(Segment.token_count), 0),
-                ).first()
+                ).filter(Segment.document_id == document_id).first()
                 self.update(document, character_count=document_character_count, token_count=document_token_count)
                 self.vector_database_service.collection.data.update(
                     uuid=str(segment.node_id),
@@ -282,7 +282,7 @@ class SegmentService(BaseService):
         document_character_count, document_token_count = self.db.session.query(
             func.coalesce(func.sum(Segment.character_count), 0),
             func.coalesce(func.sum(Segment.token_count), 0),
-        ).first()
+        ).filter(Segment.document_id == document_id).first()
         self.update(document, character_count=document_character_count, token_count=document_token_count)
 
         return segment

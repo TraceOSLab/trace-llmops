@@ -53,21 +53,12 @@ class IndexingService(BaseService):
     def build_documents(self, document_ids: list[UUID]) -> None:
         """根据文档id列表 构建知识库文档 涵盖加载、分割、索引构建、存储等"""
 
-        # 获取所有文档
-        documents = (
-            self.db.session.query(Document).filter(Document.id.in_(document_ids)).all()
-        )
-
-        # 遍历处理每一个文档
-        for document in documents:
+        # 每个任务只能认领 waiting 文档。重复投递或陈旧消息不会重建索引。
+        for document_id in document_ids:
+            document = self._claim_document(document_id)
+            if document is None:
+                continue
             try:
-                # 更改改状态为解析中
-                self.update(
-                    document,
-                    status=DocumentStatus.PARSING,
-                    processing_started_at=datetime.now(),
-                )
-
                 # 执行文档加载步骤，并更新文档的状态与时间
                 lc_documents = self._parsing(document)
 
@@ -91,6 +82,19 @@ class IndexingService(BaseService):
                 )
 
         return "根据文档id列表 构建文档"
+
+    def _claim_document(self, document_id: UUID) -> Document | None:
+        """原子地认领等待中的文档，避免重复 Celery 消息重复建索引。"""
+        with self.db.auto_commit():
+            document = (
+                self.db.session.query(Document).filter_by(id=document_id)
+                .populate_existing().with_for_update().one_or_none()
+            )
+            if document is None or document.status != DocumentStatus.WAITING:
+                return None
+            document.status = DocumentStatus.PARSING
+            document.processing_started_at = datetime.now()
+        return document
 
     def update_document_enabled(self, document_id: UUID) -> None:
         """更新指定文档状态，同步关键词 片段 向量等修改"""
@@ -166,17 +170,19 @@ class IndexingService(BaseService):
     def delete_document(self, dataset_id: UUID, document_id: UUID) -> None:
         """删除指定文档，同步关键词 片段 向量等修改"""
         # 查找文档下的所有片段 ID 列表
-        segment_ids = (
+        segment_ids = [
+            segment_id for segment_id, in (
             self.db.session.query(Segment)
             .with_entities(Segment.id)
             .filter(Segment.document_id == document_id)
             .all()
-        )
+            )
+        ]
 
         # 删除向量数据库中对应的数据
         collection = self.vector_database_service.collection
         collection.data.delete_many(
-            where=Filter.by_property("document_id").equal(document_id)
+            where=Filter.by_property("document_id").equal(str(document_id))
         )
 
         # 删除Postgres数据库的 segment 记录
@@ -193,34 +199,16 @@ class IndexingService(BaseService):
     def delete_dataset(self, dataset_id: UUID) -> None:
         """删除指定知识库 包含知识库下所有 文档、片段、关键词表、相关向量数据"""
 
-        try:
-            with self.db.auto_commit():
-                # 删除关联的文档
-                self.db.session.query(Document).filter(
-                    Document.dataset_id == dataset_id
-                ).delete()
-                # 删除关联的片段
-                self.db.session.query(Segment).filter(
-                    Segment.dataset_id == dataset_id
-                ).delete()
-                # 删除关联的关键词
-                self.db.session.query(KeywordTable).filter(
-                    KeywordTable.dataset_id == dataset_id
-                ).delete()
-                # 删除最近查询记录
-                self.db.session.query(DatasetQuery).filter(
-                    DatasetQuery.dataset_id == dataset_id
-                ).delete()
-
-            # 删除向量数据库中关联的数据
-            self.vector_database_service.collection.data.delete_many(
-                where=Filter.by_property("dataset_id").equal(str(dataset_id))
-            )
-
-        except Exception as e:
-            logging.exception(
-                f"知识库删除异步任务出错，dataset_id: {dataset_id}，错误信息：{str(e)}"
-            )
+        # 先清除向量，避免数据库已删但向量库异常时留下可召回的残留。
+        # 异常必须传回调用方，主知识库仍会保留，用户可重试删除。
+        self.vector_database_service.collection.data.delete_many(
+            where=Filter.by_property("dataset_id").equal(str(dataset_id))
+        )
+        with self.db.auto_commit():
+            self.db.session.query(Document).filter(Document.dataset_id == dataset_id).delete()
+            self.db.session.query(Segment).filter(Segment.dataset_id == dataset_id).delete()
+            self.db.session.query(KeywordTable).filter(KeywordTable.dataset_id == dataset_id).delete()
+            self.db.session.query(DatasetQuery).filter(DatasetQuery.dataset_id == dataset_id).delete()
 
     def _parsing(self, document: Document) -> list[LCDocument]:
         """解析传递的文档为LangChain文档列表"""
@@ -329,26 +317,10 @@ class IndexingService(BaseService):
                 }
             )
 
-            # 当前知识库的关键词表更新
-            keyword_table_record = (
-                self.keyword_table_service.get_keyword_table_from_dataset_id(
-                    document.dataset_id
-                )
-            )
-            keyword_table = {
-                field: set(value)
-                for field, value in keyword_table_record.keyword_table.items()
-            }
-            for keyword in keywords:
-                if keyword not in keyword_table:
-                    keyword_table[keyword] = set()
-                keyword_table[keyword].add(lc_segment.metadata["segment_id"])
-            self.update(
-                keyword_table_record,
-                keyword_table={
-                    field: list(value) for field, value in keyword_table.items()
-                },
-            )
+        self.keyword_table_service.add_keyword_table_from_ids(
+            document.dataset_id,
+            [item.metadata["segment_id"] for item in lc_segments],
+        )
 
         # 更新文档状态
         self.update(document, indexing_completed_at=datetime.now())
@@ -407,13 +379,23 @@ class IndexingService(BaseService):
             for future in futures:
                 future.result()
 
-        # 更新文档状态
-        self.update(
-            document,
-            status=DocumentStatus.COMPLETED,
-            completed_at=datetime.now(),
-            enabled=True,
-        )
+        failed_segments = self.db.session.query(func.count(Segment.id)).filter(
+            Segment.document_id == document.id,
+            Segment.status == SegmentStatus.ERROR,
+        ).scalar()
+        if failed_segments:
+            self.update(
+                document, status=DocumentStatus.ERROR,
+                error=f"{failed_segments} 个片段索引失败", stopped_at=datetime.now(),
+                enabled=False,
+            )
+        else:
+            self.update(
+                document,
+                status=DocumentStatus.COMPLETED,
+                completed_at=datetime.now(),
+                enabled=True,
+            )
 
     @classmethod
     def _clean_extra_text(cls, text: str) -> str:

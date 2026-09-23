@@ -109,6 +109,53 @@ def test_document_routes_persist_and_query(
     assert db_session.get(Document, document.id) is None
 
 
+def test_document_dispatch_failures_leave_a_recoverable_database_state(
+    client, db_session, dataset_and_upload, handler_for, monkeypatch
+):
+    """Celery 消息没有入队时，不能留下永远 waiting 的文档或误删主记录。"""
+    from internal.entity.dataset_entity import DocumentStatus
+    from internal.model import Document, ProcessRule
+    import internal.service.document_service as document_service_module
+
+    dataset, upload = dataset_and_upload
+    document_handler = handler_for("create_documents")
+    document_service = document_handler.document_service
+    monkeypatch.setattr(document_service, "redis_client", MagicMock())
+    document_service.redis_client.get.return_value = None
+    monkeypatch.setattr(
+        document_service_module.build_documents, "delay", MagicMock(side_effect=RuntimeError("broker down"))
+    )
+
+    response = client.post(
+        f"/datasets/{dataset.id}/documents",
+        json={"upload_file_ids": [str(upload.id)], "process_type": "automatic", "rule": {}},
+    )
+    assert response.status_code == 200
+    assert response.get_json()["code"] == "fail"
+    db_session.expire_all()
+    document = db_session.query(Document).filter_by(upload_file_id=upload.id).one()
+    assert document.status == DocumentStatus.ERROR
+    assert document.error == "文档索引任务派发失败"
+
+    rule = ProcessRule(
+        id=uuid4(), account_id=dataset.account_id, dataset_id=dataset.id, mode="automatic", rule={}
+    )
+    deletable = Document(
+        id=uuid4(), account_id=dataset.account_id, dataset_id=dataset.id,
+        upload_file_id=upload.id, process_rule_id=rule.id, batch="delete-failure", name="delete.txt",
+        position=2, status=DocumentStatus.COMPLETED,
+    )
+    db_session.add_all([rule, deletable])
+    db_session.flush()
+    monkeypatch.setattr(
+        document_service_module.delete_document, "delay", MagicMock(side_effect=RuntimeError("broker down"))
+    )
+    response = client.post(f"/datasets/{dataset.id}/documents/{deletable.id}/delete")
+    assert response.status_code == 200
+    assert response.get_json()["code"] == "fail"
+    assert db_session.get(Document, deletable.id) is not None
+
+
 def test_segment_routes_persist_and_query(
     client, db_session, dataset_and_upload, handler_for, monkeypatch
 ):
@@ -132,6 +179,19 @@ def test_segment_routes_persist_and_query(
         status=DocumentStatus.COMPLETED,
     )
     db_session.add_all([rule, document])
+    other_document = Document(
+        id=uuid4(), account_id=dataset.account_id, dataset_id=dataset.id,
+        upload_file_id=upload.id, process_rule_id=rule.id, batch="other-document",
+        name="other.txt", position=2, enabled=True, status=DocumentStatus.COMPLETED,
+    )
+    # 用于验证文档汇总只计算自己的片段，不能把同知识库的其他文档混进来。
+    sibling_segment = Segment(
+        id=uuid4(), account_id=dataset.account_id, dataset_id=dataset.id,
+        document_id=other_document.id, node_id=uuid4(), position=1, content="x" * 100,
+        character_count=100, token_count=200, keywords=[], hash="other", enabled=True,
+        status=SegmentStatus.COMPLETED,
+    )
+    db_session.add_all([other_document, sibling_segment])
     db_session.flush()
 
     segment_service = handler_for("create_segment").segment_service
@@ -157,6 +217,9 @@ def test_segment_routes_persist_and_query(
         .one()
     )
     assert segment.status == SegmentStatus.COMPLETED
+    db_session.expire_all()
+    assert db_session.get(Document, document.id).character_count == len("first segment")
+    assert db_session.get(Document, document.id).token_count == len("first segment")
 
     assert_success(
         client.get(
