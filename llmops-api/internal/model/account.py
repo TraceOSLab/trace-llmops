@@ -90,8 +90,6 @@ class Account(UserMixin, db.Model):
 
                 # 更新最新的 id
                 self.assistant_agent_conversation_id = assistant_conversation.id
-                print("id:", assistant_conversation.id)
-                print("modified:", db.session.is_modified(self))
                 db.session.flush()
         return assistant_conversation
 

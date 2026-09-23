@@ -10,6 +10,7 @@ import json
 from dataclasses import dataclass
 from threading import Thread
 from typing import Generator
+from uuid import UUID
 
 from flask import current_app
 from injector import inject
@@ -148,7 +149,7 @@ class OpenApiService(BaseService):
             llm=llm,
             agent_config=AgentConfig(
                 user_id=account.id,
-                invoke_from=InvokeFrom.DEBUGGER,
+                invoke_from=InvokeFrom.SERVICE_API,
                 enable_long_term_memory=app_config["long_term_memory"]["enable"],
                 preset_prompt=app_config["preset_prompt"],
                 review_config=app_config["review_config"],
@@ -168,47 +169,63 @@ class OpenApiService(BaseService):
             agent_thoughts = {}
 
             def handle_stream(
-                end_user_id: str,
-                conversation_id: str,
-                message_id: str,
-                account_id: str,
-                app_id: str,
+                end_user_id: UUID,
+                conversation_id: UUID,
+                message_id: UUID,
+                account_id: UUID,
+                app_id: UUID,
             ) -> Generator:
                 """函数返回 yield 作为生成器"""
+                agent_stream = agent.stream(agent_state)
+                flask_app = current_app._get_current_object()
 
-                for agent_thought in agent.stream(agent_state):
-                    event_id = str(agent_thought.id)
+                def save_agent_thoughts() -> None:
+                    Thread(
+                        target=self.conversation_service.save_agent_thoughts,
+                        kwargs={
+                            "flask_app": flask_app,
+                            "account_id": account_id,
+                            "app_id": app_id,
+                            "app_config": app_config,
+                            "conversation_id": conversation_id,
+                            "message_id": message_id,
+                            "agent_thoughts": list(agent_thoughts.values()),
+                        },
+                    ).start()
+
+                def consume(agent_thought):
                     merge_agent_thought(agent_thoughts, agent_thought)
-                    data = {
+                    return {
                         **stream_payload(agent_thought, agent_thoughts),
-                        "id": event_id,
-                        "end_user_id": end_user_id,
-                        "conversation_id": conversation_id,
-                        "message_id": message_id,
+                        "id": str(agent_thought.id),
+                        "end_user_id": str(end_user_id),
+                        "conversation_id": str(conversation_id),
+                        "message_id": str(message_id),
                         "task_id": str(agent_thought.task_id),
                     }
-                    yield f"event: {agent_thought.event.value}\ndata: {json.dumps(data)}\n\n"
 
-                # 将消息以及推理过程添加到数据库记录
-                thread = Thread(
-                    target=self.conversation_service.save_agent_thoughts,
-                    kwargs={
-                        "flask_app": current_app._get_current_object(),
-                        "account_id": account_id,
-                        "app_id": app_id,
-                        "app_config": app_config,
-                        "conversation_id": conversation_id,
-                        "message_id": message_id,
-                        "agent_thoughts": [
-                            agent_thought for agent_thought in agent_thoughts.values()
-                        ],
-                    },
-                )
-                thread.start()
+                completed = False
+                try:
+                    for agent_thought in agent_stream:
+                        data = consume(agent_thought)
+                        yield f"event: {agent_thought.event.value}\ndata: {json.dumps(data)}\n\n"
+                    completed = True
+                finally:
+                    if completed:
+                        save_agent_thoughts()
+                    else:
+                        def drain_stream() -> None:
+                            try:
+                                for agent_thought in agent_stream:
+                                    consume(agent_thought)
+                            finally:
+                                save_agent_thoughts()
 
-            end_user_id = str(end_user.id)
-            conversation_id = str(conversation.id)
-            message_id = str(message.id)
+                        Thread(target=drain_stream, kwargs={}).start()
+
+            end_user_id = end_user.id
+            conversation_id = conversation.id
+            message_id = message.id
             account_id = account.id
             app_id = app.id
 

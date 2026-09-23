@@ -7,8 +7,9 @@
 """
 
 import json
+import logging
 from dataclasses import dataclass
-from queue import Queue
+from queue import Empty, Queue
 from threading import Thread
 from typing import Dict, Any, Literal, Generator
 from uuid import UUID, uuid4
@@ -330,16 +331,27 @@ class AppHandler:
 
             graph = graph_builder.compile()
 
-            graph.invoke({"messages": [("human", query)]})
-            q.put(None)
+            try:
+                graph.invoke({"messages": [("human", query)]})
+            except Exception as exc:
+                logging.exception("旧版应用调试执行失败")
+                q.put({"id": str(uuid4()), "event": "error", "data": str(exc)})
+            finally:
+                # 无论模型或工具是否失败，消费者都必须收到结束标记。
+                q.put(None)
 
         def stream_event_response() -> Generator:
             """流式输出事件"""
             while True:
-                item = q.get()
+                try:
+                    item = q.get(timeout=600)
+                except Empty:
+                    yield f"event: timeout\ndata: {json.dumps({'event': 'timeout'})}\n\n"
+                    return
                 if item is None:
-                    break
-                yield f"event: {item.get('event').value}\ndata: {json.dumps(item)}\n\n"
+                    return
+                # 此旧接口写入队列的是字符串事件名，不能再取 .value。
+                yield f"event: {item.get('event')}\ndata: {json.dumps(item)}\n\n"
                 q.task_done()
 
         t = Thread(target=graph_app)

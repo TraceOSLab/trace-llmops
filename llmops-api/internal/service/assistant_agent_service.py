@@ -94,42 +94,57 @@ class AssistantAgentService(BaseService):
 
         # 提取 agent_thought
         agent_thoughts = {}
-        for agent_thought in agent.stream(
+        agent_stream = agent.stream(
             {
                 "messages": [HumanMessage(query)],
                 "history": history,
                 "long_term_memory": conversation.summary,
             }
-        ):
-            event_id = str(agent_thought.id)
+        )
+        flask_app = current_app._get_current_object()
 
+        def save_agent_thoughts() -> None:
+            Thread(
+                target=self.conversation_service.save_agent_thoughts,
+                kwargs={
+                    "flask_app": flask_app,
+                    "account_id": account.id,
+                    "app_id": assistant_agent_id,
+                    "app_config": {"long_term_memory": {"enable": True}},
+                    "conversation_id": conversation.id,
+                    "message_id": message.id,
+                    "agent_thoughts": list(agent_thoughts.values()),
+                },
+            ).start()
+
+        def consume(agent_thought):
             merge_agent_thought(agent_thoughts, agent_thought)
-            data = {
+            return {
                 **stream_payload(agent_thought, agent_thoughts),
-                "id": event_id,
+                "id": str(agent_thought.id),
                 "conversation_id": str(conversation.id),
                 "message_id": str(message.id),
                 "task_id": str(agent_thought.task_id),
             }
-            yield f"event: {agent_thought.event.value}\ndata:{json.dumps(data)}\n\n"
 
-        thread = Thread(
-            target=self.conversation_service.save_agent_thoughts,
-            kwargs={
-                "flask_app": current_app._get_current_object(),
-                "account_id": account.id,
-                "app_id": assistant_agent_id,
-                "app_config": {
-                    "long_term_memory": {"enable": True},
-                },
-                "conversation_id": conversation.id,
-                "message_id": message.id,
-                "agent_thoughts": [
-                    agent_thought for agent_thought in agent_thoughts.values()
-                ],
-            },
-        )
-        thread.start()
+        completed = False
+        try:
+            for agent_thought in agent_stream:
+                data = consume(agent_thought)
+                yield f"event: {agent_thought.event.value}\ndata:{json.dumps(data)}\n\n"
+            completed = True
+        finally:
+            if completed:
+                save_agent_thoughts()
+            else:
+                def drain_stream() -> None:
+                    try:
+                        for agent_thought in agent_stream:
+                            consume(agent_thought)
+                    finally:
+                        save_agent_thoughts()
+
+                Thread(target=drain_stream, kwargs={}).start()
 
     def stop_assistant_agent_chat(self, task_id: UUID, account: Account):
         """辅助智能体停止会话"""

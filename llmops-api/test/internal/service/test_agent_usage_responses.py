@@ -102,3 +102,119 @@ def test_services_return_and_save_consistent_usage(monkeypatch, entry, stream, t
     saved = next(event for event in saves[0]["agent_thoughts"] if event.id == step_id)
     assert saved.answer == "答案"
     assert saved.usage == usage
+
+
+@pytest.mark.parametrize("entry", ["debug", "public"])
+def test_stream_disconnect_drains_agent_and_persists_terminal_result(monkeypatch, entry):
+    """客户端停止消费 SSE 后，Service 仍要消费同一 Agent 流并保存最终状态。"""
+    module = importlib.import_module(
+        "internal.service.app_service" if entry == "debug" else "internal.service.openapi_service"
+    )
+    step_id, task_id = uuid4(), uuid4()
+    events = iter([
+        AgentThought(id=step_id, task_id=task_id, event=QueueEvent.AGENT_MESSAGE, answer="部分回答"),
+        AgentThought(id=uuid4(), task_id=task_id, event=QueueEvent.ERROR, observation="模型断开"),
+    ])
+    monkeypatch.setattr(module, "FunctionCallAgent", lambda **_kwargs: SimpleNamespace(
+        stream=lambda _state: events,
+    ))
+    monkeypatch.setattr(module, "AgentConfig", lambda **kwargs: SimpleNamespace(**kwargs))
+    monkeypatch.setattr(module, "TokenBufferMemory", lambda **_kwargs: SimpleNamespace(
+        get_history_prompt_messages=lambda **_kwargs: [],
+    ))
+    thread_calls = []
+
+    class InlineThread:
+        def __init__(self, target, kwargs):
+            self.target = target
+            self.kwargs = kwargs
+
+        def start(self):
+            thread_calls.append(self.kwargs)
+            self.target(**self.kwargs)
+
+    monkeypatch.setattr(module, "Thread", InlineThread)
+    account = SimpleNamespace(id=uuid4())
+    app_id = uuid4()
+    end_user = SimpleNamespace(id=uuid4(), app_id=app_id)
+    conversation = SimpleNamespace(id=uuid4(), app_id=app_id, invoke_from=InvokeFrom.SERVICE_API,
+                                   created_by=end_user.id, summary="")
+    message = SimpleNamespace(id=uuid4())
+    app = SimpleNamespace(id=app_id, status=AppStatus.PUBLISHED, debug_conversation=conversation)
+    config = {"model_config": {"provider": "zhipu", "model": "glm-5.2"}, "dialog_round": 3,
+              "tools": [], "datasets": [], "workflows": [], "long_term_memory": {"enable": False},
+              "preset_prompt": "", "review_config": {}}
+    service = SimpleNamespace(
+        db=MagicMock(), get_app=lambda *_args: app, get_draft_app_config=lambda *_args: config,
+        create=lambda *_args, **_kwargs: message,
+        app_service=SimpleNamespace(get_app=lambda *_args: app),
+        app_config_service=SimpleNamespace(get_app_config=lambda *_args: config,
+            get_langchain_tools_by_tools_config=lambda *_args: []),
+        language_model_manager=SimpleNamespace(create_language_model=lambda *_args: object()),
+        conversation_service=MagicMock(),
+        get=lambda model, _id: end_user if model.__name__ == "EndUser" else conversation,
+    )
+    request = SimpleNamespace(**{key: SimpleNamespace(data=value) for key, value in {
+        "app_id": app_id, "end_user_id": end_user.id, "conversation_id": conversation.id,
+        "query": "问题", "stream": True,
+    }.items()})
+
+    with Flask(__name__).app_context():
+        stream = (module.AppService.debug_chat(service, app_id, "问题", account)
+                  if entry == "debug" else module.OpenApiService.chat(service, request, account))
+        next(stream)
+        stream.close()
+
+    saved_calls = service.conversation_service.save_agent_thoughts.call_args_list
+    assert len(saved_calls) == 1
+    saved = saved_calls[0].kwargs["agent_thoughts"]
+    assert [item.event for item in saved] == [QueueEvent.AGENT_MESSAGE, QueueEvent.ERROR]
+    assert saved[0].answer == "部分回答"
+
+
+def test_assistant_stream_disconnect_drains_and_persists(monkeypatch):
+    """辅助 Agent 与调试/公开入口使用相同的断连保存语义。"""
+    module = importlib.import_module("internal.service.assistant_agent_service")
+    task_id = uuid4()
+    events = iter([
+        AgentThought(id=uuid4(), task_id=task_id, event=QueueEvent.AGENT_MESSAGE, answer="部分回答"),
+        AgentThought(id=uuid4(), task_id=task_id, event=QueueEvent.STOP),
+    ])
+    monkeypatch.setattr(module, "FunctionCallAgent", lambda **_kwargs: SimpleNamespace(
+        stream=lambda _state: events,
+    ))
+    monkeypatch.setattr(module, "AgentConfig", lambda **kwargs: SimpleNamespace(**kwargs))
+    monkeypatch.setattr(module, "TokenBufferMemory", lambda **_kwargs: SimpleNamespace(
+        get_history_prompt_messages=lambda **_kwargs: [],
+    ))
+
+    class InlineThread:
+        def __init__(self, target, kwargs):
+            self.target = target
+            self.kwargs = kwargs
+
+        def start(self):
+            self.target(**self.kwargs)
+
+    monkeypatch.setattr(module, "Thread", InlineThread)
+    account = SimpleNamespace(id=uuid4(), assistant_agent_conversation=SimpleNamespace(id=uuid4(), summary=""))
+    message = SimpleNamespace(id=uuid4())
+    service = SimpleNamespace(
+        db=MagicMock(),
+        get=lambda *_args: account,
+        create=lambda *_args, **_kwargs: message,
+        language_model_manager=SimpleNamespace(create_default_language_model=lambda *_args: object()),
+        faiss_service=SimpleNamespace(convert_faiss_to_tool=lambda: MagicMock()),
+        convert_create_app_to_tool=lambda *_args: MagicMock(),
+        conversation_service=MagicMock(),
+    )
+
+    flask_app = Flask(__name__)
+    flask_app.config["ASSISTANT_AGENT_ID"] = uuid4()
+    with flask_app.app_context():
+        stream = module.AssistantAgentService.assistant_agent_chat(service, "问题", account.id)
+        next(stream)
+        stream.close()
+
+    saved = service.conversation_service.save_agent_thoughts.call_args.kwargs["agent_thoughts"]
+    assert [item.event for item in saved] == [QueueEvent.AGENT_MESSAGE, QueueEvent.STOP]

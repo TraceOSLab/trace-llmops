@@ -120,6 +120,11 @@ class EmptyGraph:
         return None
 
 
+class FailingGraph(EmptyGraph):
+    def invoke(self, *args, **kwargs):
+        raise RuntimeError("model unavailable")
+
+
 def test_app_debug_stream_stop_and_ping_routes(
     client, app_record, handler_for, monkeypatch
 ):
@@ -143,6 +148,13 @@ def test_app_debug_stream_stop_and_ping_routes(
     )
     assert debug_response.status_code == 200
     assert debug_response.mimetype == "text/event-stream"
+    assert debug_response.get_data() == b""
+
+    monkeypatch.setattr(app_handler_module, "StateGraph", lambda *args: FailingGraph())
+    failed_debug_response = client.post(
+        f"/apps/{app_record.id}/debug", json={"query": "hello"}
+    )
+    assert b"event: error" in failed_debug_response.get_data()
 
     monkeypatch.setattr(app_handler.app_service, 'debug_chat', MagicMock(
         return_value=iter(["event: done\ndata: {}\n\n"])

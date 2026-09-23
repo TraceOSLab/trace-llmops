@@ -507,43 +507,62 @@ class AppService(BaseService):
             ),
         )
 
-        # 执行智能体
+        # 执行智能体。客户端断开时，后台 Agent 仍可能继续产生终止事件；
+        # 保留同一个 iterator 供后台排空，避免已创建的消息永久没有答案或终止状态。
         agent_thoughts = {}
-        for agent_thought in agent.stream(
+        agent_stream = agent.stream(
             {
                 "messages": [HumanMessage(query)],
                 "history": history,
                 "long_term_memory": debug_conversation.summary,
             }
-        ):
-            event_id = str(agent_thought.id)
+        )
+        flask_app = current_app._get_current_object()
 
+        def save_agent_thoughts() -> None:
+            Thread(
+                target=self.conversation_service.save_agent_thoughts,
+                kwargs={
+                    "flask_app": flask_app,
+                    "account_id": account.id,
+                    "app_id": app_id,
+                    "app_config": draft_app_config,
+                    "conversation_id": debug_conversation.id,
+                    "message_id": message.id,
+                    "agent_thoughts": list(agent_thoughts.values()),
+                },
+            ).start()
+
+        def consume(agent_thought):
             merge_agent_thought(agent_thoughts, agent_thought)
-            data = {
+            return {
                 **stream_payload(agent_thought, agent_thoughts),
-                "id": event_id,
+                "id": str(agent_thought.id),
                 "conversation_id": str(debug_conversation.id),
                 "message_id": str(message.id),
                 "task_id": str(agent_thought.task_id),
             }
-            yield f"event: {agent_thought.event.value}\ndata: {json.dumps(data)}\n\n"
 
-        # 将消息以及推理过程添加到数据库记录
-        thread = Thread(
-            target=self.conversation_service.save_agent_thoughts,
-            kwargs={
-                "flask_app": current_app._get_current_object(),
-                "account_id": account.id,
-                "app_id": app_id,
-                "app_config": draft_app_config,
-                "conversation_id": debug_conversation.id,
-                "message_id": message.id,
-                "agent_thoughts": [
-                    agent_thought for agent_thought in agent_thoughts.values()
-                ],
-            },
-        )
-        thread.start()
+        completed = False
+        try:
+            for agent_thought in agent_stream:
+                data = consume(agent_thought)
+                yield f"event: {agent_thought.event.value}\ndata: {json.dumps(data)}\n\n"
+            completed = True
+        finally:
+            if completed:
+                save_agent_thoughts()
+            else:
+                # GeneratorExit（客户端断连）时继续消费 Agent 的进程内队列，
+                # 等正常/错误/停止终止事件出现后再持久化完整或部分结果。
+                def drain_stream() -> None:
+                    try:
+                        for agent_thought in agent_stream:
+                            consume(agent_thought)
+                    finally:
+                        save_agent_thoughts()
+
+                Thread(target=drain_stream, kwargs={}).start()
 
     def get_published_config(self, app_id: UUID, account: Account) -> dict[str, Any]:
         """获取应用发布配置信息"""
