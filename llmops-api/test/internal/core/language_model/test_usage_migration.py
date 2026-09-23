@@ -11,7 +11,9 @@ from alembic.script import ScriptDirectory
 def test_usage_migration_has_single_head_and_renders_upgrade_sql():
     migrations = Path(__file__).parents[4] / "internal/migrations"
     script = ScriptDirectory(str(migrations))
-    assert script.get_current_head() == "b739fd026a81"
+    # 后续功能可以新增迁移；用量迁移必须仍处于唯一活动链上。
+    assert len(script.get_heads()) == 1
+    assert "b739fd026a81" in {revision.revision for revision in script.walk_revisions()}
     spec = importlib.util.spec_from_file_location("usage_migration", migrations / "versions/b739fd026a81_agent_usage.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

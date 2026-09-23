@@ -9,12 +9,14 @@ from internal.model.account import Account
 from internal.model.app import App
 
 from .base_service import BaseService
+from pkg.sqlalchemy import SQLAlchemy
 
 
 @inject
 @dataclass
 class WebAppService(BaseService):
     """Webapp 服务"""
+    db: SQLAlchemy
 
     def get_web_app(self, token: str) -> App:
         """根据TOKEN获取应用"""

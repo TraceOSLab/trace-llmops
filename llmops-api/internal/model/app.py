@@ -21,7 +21,6 @@ from sqlalchemy.dialects.postgresql import JSONB
 from internal.entity.app_entity import AppConfigType, DEFAULT_APP_CONFIG, AppStatus
 from internal.entity.conversation_entity import InvokeFrom
 from internal.extension.database_extension import db
-from internal.lib.helper import generate_random_string
 from .conversation import Conversation
 
 
@@ -261,17 +260,8 @@ class App(db.Model):
 
     @property
     def token_with_default(self) -> str:
-        """获取默认值TOKEN"""
-        # 未发布状态清空 已经发布重新生成
-        if self.status != AppStatus.PUBLISHED:
-            if self.token is not None or self.token == "":
-                self.token = None
-                db.session.auto_commit()
-            return ""
-        if self.token is None or self.token == "":
-            self.token = generate_random_string(16)
-            db.session.auto_commit
-        return self.token
+        """读取已发布凭证；生成和持久化由 AppService 编排。"""
+        return (self.token or "") if self.status == AppStatus.PUBLISHED else ""
 
 
 class AppDatasetJoin(db.Model):

@@ -6,20 +6,27 @@
 @Author :   s.qiu@foxmail.com
 """
 import os
+import hashlib
+import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
 from flask import request
 from injector import inject
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 
-from internal.exception import NotFoundException, UnauthorizedException
+from internal.exception import FailException, NotFoundException, UnauthorizedException
 from pkg.oauth import OAuth, GithubOAuth
 from pkg.sqlalchemy import SQLAlchemy
 from . import AccountService
 from .base_service import BaseService
 from .jwt_service import JWTService
 from ..model import Account, AccountOAuth
+
+
+OAUTH_LOCK_TIMEOUT = "5s"
 
 
 @inject
@@ -62,6 +69,7 @@ class OAuthService(BaseService):
 
         # 外部请求在事务前完成；账号、绑定、登录状态和凭证生成作为一次操作。
         with self.db.auto_commit():
+            self._lock_login_identity(provider_name, oauth_user_info.id, oauth_user_info.email)
             account_oauth = self.account_service.get_account_oauth_by_provider_name_and_openid(
                 provider_name, oauth_user_info.id,
             )
@@ -88,3 +96,31 @@ class OAuthService(BaseService):
             payload = {"sub": str(account.id), "iss": "llmops", "exp": expire_at}
             access_token = self.jwt_service.generate_token(payload)
         return {"expire_at": expire_at, "access_token": access_token}
+
+    def _lock_login_identity(self, provider: str, openid: str, email: str) -> None:
+        """在查询前串行化同身份或同邮箱登录；事务结束时由 PostgreSQL 释放。"""
+        identities = [("oauth-identity", provider, openid), ("oauth-email", email)]
+        keys = sorted({
+            int.from_bytes(hashlib.sha256(json.dumps(identity).encode()).digest()[:8],
+                           byteorder="big", signed=True)
+            for identity in identities
+        })
+        previous_timeout = self.db.session.scalar(text("SELECT current_setting('lock_timeout')"))
+        self.db.session.execute(
+            text("SELECT set_config('lock_timeout', :timeout, true)"),
+            {"timeout": OAUTH_LOCK_TIMEOUT},
+        )
+        try:
+            # 固定顺序避免两个请求分别持有邮箱/身份锁后相互等待。
+            for key in keys:
+                self.db.session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": key})
+        except DBAPIError as error:
+            if getattr(error.orig, "pgcode", None) == "55P03":
+                # 超时会使事务失效；外层 auto_commit 回滚并释放已持有的锁。
+                raise FailException("登录请求繁忙，请稍后重试") from None
+            raise
+        # 不改变本事务后续操作的锁等待配置；出错时由 rollback 恢复。
+        self.db.session.execute(
+            text("SELECT set_config('lock_timeout', :timeout, true)"),
+            {"timeout": previous_timeout},
+        )

@@ -7,7 +7,7 @@
 """
 
 import string
-import random
+import secrets
 import importlib
 from datetime import datetime
 from enum import Enum
@@ -111,7 +111,7 @@ def generate_random_string(length: int = 16) -> str:
     # 1.定义字符集，包含大小写字母和数字
     chars = string.ascii_letters + string.digits
 
-    # 2.使用random.choices生成指定长度的随机字符串
-    random_str = "".join(random.choices(chars, k=length))
+    # 2.该字符串用于应用凭证，使用密码学安全随机源。
+    random_str = "".join(secrets.choice(chars) for _ in range(length))
 
     return random_str

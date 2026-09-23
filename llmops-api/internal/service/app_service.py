@@ -7,7 +7,7 @@
 """
 
 import json
-import string
+from copy import deepcopy
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -49,7 +49,7 @@ from internal.exception import (
     ValidateErrorException,
     FailException,
 )
-from internal.lib.helper import generate_random_string, get_value_type, remove_fields
+from internal.lib.helper import generate_random_string, get_value_type
 from internal.model import (
     App,
     Account,
@@ -208,8 +208,11 @@ class AppService(BaseService):
 
     def delete_app(self, app_id: uuid.UUID, account: Account) -> App:
         """删除指定应用"""
-        app = self.get_app(app_id, account)
-        self.delete(app)
+        with self.db.auto_commit():
+            app = self._get_app_for_update(app_id, account)
+            for model in (AppDatasetJoin, AppConfigVersion, AppConfig):
+                self.db.session.query(model).filter_by(app_id=app.id).delete()
+            self.db.session.delete (app)
         return app
 
     def update_app(self, app_id: uuid.UUID, account: Account, **kwargs) -> App:
@@ -232,52 +235,46 @@ class AppService(BaseService):
         )
         return apps, paginate
 
-    def copy_app(self, app_id: uuid.UUID, account: Account) -> App:
-        """创建应用副本 拷贝Agent信息创建新Agent"""
+    def _get_app_for_update(self, app_id: UUID, account: Account) -> App:
+        """生命周期写入先锁住应用行，再读取草稿和版本号。"""
+        app = (self.db.session.query(App).filter(App.id == app_id)
+               .populate_existing().with_for_update().one_or_none())
+        if app is None:
+            raise NotFoundException("该应用不存在")
+        if app.account_id != account.id:
+            raise ForbiddenException("当前账号无权限！")
+        return app
 
-        # 获取应用以及应用草稿配置
-        app = self.get_app(app_id, account)
-        draft_app_config = app.draft_app_config
-        # 复制 应用信息、应用草稿配置信息
-        app_copy = app.__dict__.copy()
-        draft_app_config_copy = draft_app_config.__dict__.copy()
+    def _get_draft_record(self, app: App) -> AppConfigVersion:
+        draft = (self.db.session.query(AppConfigVersion)
+                 .filter_by(app_id=app.id, config_type=AppConfigType.DRAFT)
+                 .populate_existing().one_or_none())
+        if draft is None:
+            draft = AppConfigVersion(app_id=app.id, version=0,
+                                     config_type=AppConfigType.DRAFT, **deepcopy(DEFAULT_APP_CONFIG))
+            self.db.session.add(draft)
+            self.db.session.flush()
+        app.draft_app_config_id = draft.id
+        return draft
 
-        # 移除不需要拷贝的字段
-        app_remove_fields = [
-            "id",
-            "app_config_id",
-            "draft_app_config_id",
-            "debug_conversation_id",
-            "status",
-            "updated_at",
-            "created_at",
-            "_sa_instance_state",
-        ]
-        draft_app_config_remove_fields = [
-            "id",
-            "app_id",
-            "version",
-            "updated_at",
-            "created_at",
-            "_sa_instance_state",
-        ]
-        remove_fields(app_copy, app_remove_fields)
-        remove_fields(draft_app_config_copy, draft_app_config_remove_fields)
+    @staticmethod
+    def _config_values(config: AppConfigVersion) -> dict[str, Any]:
+        return deepcopy({key: getattr(config, key) for key in DEFAULT_APP_CONFIG})
 
-        # 添加到数据库 自动提交上下文
+    def copy_app(self, app_id: UUID, account: Account) -> App:
+        """只复制应用信息及独立草稿，不复制发布凭证和会话。"""
         with self.db.auto_commit():
-            new_app = App(**app_copy, status=AppStatus.DRAFT)
+            app = self._get_app_for_update(app_id, account)
+            values = self._config_values(self._get_draft_record(app))
+            new_app = App(account_id=account.id, name=app.name, icon=app.icon,
+                          description=app.description, status=AppStatus.DRAFT)
             self.db.session.add(new_app)
             self.db.session.flush()
-
-            new_draft_app_config = AppConfigVersion(
-                **draft_app_config_copy, app_id=new_app.id, version=0
-            )
-            self.db.session.add(new_draft_app_config)
+            draft = AppConfigVersion(app_id=new_app.id, version=0,
+                                     config_type=AppConfigType.DRAFT, **values)
+            self.db.session.add(draft)
             self.db.session.flush()
-
-            new_app.draft_app_config_id = new_draft_app_config.id
-
+            new_app.draft_app_config_id = draft.id
         return new_app
 
     def get_draft_app_config(self, app_id: UUID, account: Account) -> dict[str, Any]:
@@ -287,140 +284,70 @@ class AppService(BaseService):
     def update_draft_app_config(
         self, app_id: UUID, draft_app_config: dict[str, Any], account: Account
     ) -> AppConfigVersion:
-        """更新应用草稿配置"""
-        app = self.get_app(app_id, account)
-        # 校验传递的草稿配置
-        draft_app_config = self._validate_draft_app_config(draft_app_config, account)
-
-        draft_app_config_record = app.draft_app_config
-        # todo:6 字段手动传递
-        self.update(
-            draft_app_config_record, updated_at=datetime.now(), **draft_app_config
-        )
-        return draft_app_config_record
+        with self.db.auto_commit():
+            app = self._get_app_for_update(app_id, account)
+            values = self._validate_draft_app_config(deepcopy(draft_app_config), account)
+            draft = self._get_draft_record(app)
+            for key, value in values.items():
+                setattr(draft, key, value)
+            draft.updated_at = datetime.now()
+        return draft
 
     def publish_draft_app_config(self, app_id: UUID, account: Account):
-        """发布/更新指定应用草稿配置为运行时配置"""
-        app = self.get_app(app_id, account)
-        draft_app_config = self.get_draft_app_config(app_id, account)
-
-        # 创建应用的运行配置
-        app_config = self.create(
-            AppConfig,
-            app_id=app_id,
-            model_config=draft_app_config["model_config"],
-            dialog_round=draft_app_config["dialog_round"],
-            preset_prompt=draft_app_config["preset_prompt"],
-            retrieval_config=draft_app_config["retrieval_config"],
-            long_term_memory=draft_app_config["long_term_memory"],
-            opening_statement=draft_app_config["opening_statement"],
-            opening_questions=draft_app_config["opening_questions"],
-            speech_to_text=draft_app_config["speech_to_text"],
-            text_to_speech=draft_app_config["text_to_speech"],
-            suggested_after_answer=draft_app_config["suggested_after_answer"],
-            review_config=draft_app_config["review_config"],
-            workflows=[workflow["id"] for workflow in draft_app_config["workflows"]],
-            tools=[
-                {
-                    "type": tool["type"],
-                    "provider_id": tool["provider"]["id"],
-                    "tool_id": tool["tool"]["name"],
-                    "params": tool["tool"]["params"],
-                }
-                for tool in draft_app_config["tools"]
-            ],
-        )
-        self.update(app, app_config_id=app_config.id, status=AppStatus.PUBLISHED)
-
-        # 删除原有关联知识库 与新增知识库新型关联
+        """运行配置、知识库关联、发布版本及应用指针一起提交。"""
         with self.db.auto_commit():
-            self.db.session.query(AppDatasetJoin).filter(
-                AppDatasetJoin.app_id == app.id
-            ).delete()
-
-        for dataset in draft_app_config["datasets"]:
-            self.create(AppDatasetJoin, app_id=app.id, dataset_id=dataset["id"])
-
-        # 获取应用草稿记录，并移除id、version、config_type、updated_at、created_at字段
-        draft_app_config_copy = app.draft_app_config.__dict__.copy()
-        remove_fields = [
-            "id",
-            "version",
-            "config_type",
-            "updated_at",
-            "created_at",
-            "_sa_instance_state",
-        ]
-        for field in remove_fields:
-            draft_app_config_copy.pop(field)
-
-        # 获取当前最大的发布版本
-        max_version = (
-            self.db.session.query(func.coalesce(func.max(AppConfigVersion.version), 0))
-            .filter(
-                AppConfigVersion.app_id == app.id,
-                AppConfigVersion.config_type == AppConfigType.PUBLISHED,
-            )
-            .scalar()
-        )
-
-        # 新增发布历史 配置信息
-        self.create(
-            AppConfigVersion,
-            version=max_version + 1,
-            config_type=AppConfigType.PUBLISHED,
-            **draft_app_config_copy,
-        )
-
+            app = self._get_app_for_update(app_id, account)
+            draft = self._get_draft_record(app)
+            values = self._validate_draft_app_config(self._config_values(draft), account)
+            runtime = AppConfig(app_id=app.id, **deepcopy({
+                key: value for key, value in values.items() if key != "datasets"
+            }))
+            self.db.session.add(runtime)
+            self.db.session.flush()
+            self.db.session.query(AppDatasetJoin).filter_by(app_id=app.id).delete()
+            self.db.session.add_all([
+                AppDatasetJoin(app_id=app.id, dataset_id=dataset_id)
+                for dataset_id in values["datasets"]
+            ])
+            max_version = (self.db.session.query(func.coalesce(func.max(AppConfigVersion.version), 0))
+                           .filter_by(app_id=app.id, config_type=AppConfigType.PUBLISHED).scalar())
+            self.db.session.add(AppConfigVersion(
+                app_id=app.id, version=max_version + 1,
+                config_type=AppConfigType.PUBLISHED, **deepcopy(values),
+            ))
+            for key, value in values.items():
+                setattr(draft, key, deepcopy(value))
+            app.app_config_id = runtime.id
+            app.status = AppStatus.PUBLISHED
         return app
 
     def cancel_publish_app_config(self, app_id: UUID, account: Account):
-        """取消发布指定应用配置"""
-        app = self.get_app(app_id, account)
-        if app.status == AppStatus.DRAFT:
-            raise FailException("该应用未发布")
-
-        # 修改应用状态到草稿状态啊 清空关联的配置ID
-        self.update(app, status=AppStatus.DRAFT, app_config_id=None)
-
-        # 清空关联的知识库
         with self.db.auto_commit():
-            self.db.session.query(AppDatasetJoin).filter(
-                AppDatasetJoin.app_id == app.id
-            ).delete()
+            app = self._get_app_for_update(app_id, account)
+            if app.status == AppStatus.DRAFT:
+                raise FailException("该应用未发布")
+            app.status = AppStatus.DRAFT
+            app.app_config_id = None
+            app.token = None
+            self.db.session.query(AppDatasetJoin).filter_by(app_id=app.id).delete()
         return app
 
     def fallback_history_to_draft(
         self, app_id: UUID, app_config_version_id: UUID, account: Account
     ):
-        app = self.get_app(app_id, account)
-        app_config_version = self.get(AppConfigVersion, app_config_version_id)
-        if not app_config_version:
-            raise NotFoundException("该历史版本不存在")
-
-        # 校验历史版本配置信息 剔除已删除的工具、知识库、工作流
-        draft_app_config_dict = app_config_version.__dict__.copy()
-        remove_fields = [
-            "id",
-            "app_id",
-            "version",
-            "config_type",
-            "updated_at",
-            "created_at",
-            "_sa_instance_state",
-        ]
-        for field in remove_fields:
-            draft_app_config_dict.pop(field)
-        draft_app_config_dict = self._validate_draft_app_config(
-            draft_app_config_dict, account
-        )
-
-        # 更新草稿配置信息
-        draft_app_config_record = app.draft_app_config
-        self.update(
-            draft_app_config_record, updated_at=datetime.now(), **draft_app_config_dict
-        )
-        return draft_app_config_record
+        with self.db.auto_commit():
+            app = self._get_app_for_update(app_id, account)
+            history = self.db.session.query(AppConfigVersion).filter_by(
+                id=app_config_version_id, app_id=app.id, config_type=AppConfigType.PUBLISHED,
+            ).one_or_none()
+            if history is None:
+                raise NotFoundException("该历史版本不存在")
+            values = self._validate_draft_app_config(self._config_values(history), account)
+            draft = self._get_draft_record(app)
+            for key, value in values.items():
+                setattr(draft, key, value)
+            draft.updated_at = datetime.now()
+        return draft
 
     def get_publish_histories_with_page(
         self, app_id: UUID, req: GetPublishHistoriesWithPageReq, account: Account
@@ -620,8 +547,12 @@ class AppService(BaseService):
 
     def get_published_config(self, app_id: UUID, account: Account) -> dict[str, Any]:
         """获取应用发布配置信息"""
-        app = self.get_app(app_id, account)
-
+        with self.db.auto_commit():
+            app = self._get_app_for_update(app_id, account)
+            if app.status != AppStatus.PUBLISHED:
+                app.token = None
+            elif not app.token:
+                app.token = generate_random_string(16)
         return {
             "web_app": {
                 "token": app.token_with_default,
@@ -629,13 +560,14 @@ class AppService(BaseService):
             }
         }
 
-    def regenerate_web_app_token(self, app_id: UUID, account: Account) -> string:
+    def regenerate_web_app_token(self, app_id: UUID, account: Account) -> str:
         """重新生成 webapp token 凭证信息/重新生成"""
-        app = self.get_app(app_id, account)
-        if app.status != AppStatus.PUBLISHED:
-            raise FailException("应用未发布无法生成凭证")
-        token = generate_random_string(16)
-        self.update(app, token)
+        with self.db.auto_commit():
+            app = self._get_app_for_update(app_id, account)
+            if app.status != AppStatus.PUBLISHED:
+                raise FailException("应用未发布无法生成凭证")
+            token = generate_random_string(16)
+            app.token = token
         return token
 
     def _validate_draft_app_config(
@@ -678,6 +610,8 @@ class AppService(BaseService):
             # 3.2 判断model_config键信息是否正确
             if set(model_config.keys()) != {"provider", "model", "parameters"}:
                 raise ValidateErrorException("模型键配置格式错误，请核实后重试")
+            if not isinstance(model_config["parameters"], dict):
+                raise ValidateErrorException("模型参数必须是字典")
 
             # 3.3 判断模型提供者信息是否正确
             if not model_config["provider"] or not isinstance(
@@ -744,7 +678,7 @@ class AppService(BaseService):
         # 4.校验dialog_round上下文轮数，校验数据类型以及范围
         if "dialog_round" in draft_app_config:
             dialog_round = draft_app_config["dialog_round"]
-            if not isinstance(dialog_round, int) or not (0 <= dialog_round <= 100):
+            if type(dialog_round) is not int or not (0 <= dialog_round <= 100):
                 raise ValidateErrorException("携带上下文轮数范围为0-100")
 
         # 5.校验preset_prompt
@@ -796,6 +730,10 @@ class AppService(BaseService):
                     if not builtin_tool:
                         continue
                 else:
+                    try:
+                        UUID(tool["provider_id"])
+                    except (ValueError, TypeError, AttributeError):
+                        raise ValidateErrorException("插件提供者标识必须是UUID") from None
                     api_tool = (
                         self.db.session.query(ApiTool)
                         .filter(
@@ -827,6 +765,11 @@ class AppService(BaseService):
                 raise ValidateErrorException("工作流列表格式错误")
             if len(workflows) > 5:
                 raise ValidateErrorException("应用下最多可以绑定5个工作流")
+            for workflow_id in workflows:
+                try:
+                    UUID(workflow_id)
+                except (ValueError, TypeError, AttributeError):
+                    raise ValidateErrorException("工作流标识必须是UUID") from None
             # 7.2 判断是否有重复工作流
             if len(set(workflows)) != len(workflows):
                 raise ValidateErrorException("绑定工作流存在重复")

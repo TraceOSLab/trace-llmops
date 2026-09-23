@@ -6,6 +6,7 @@
 @Author :   s.qiu@foxmail.com
 """
 from dataclasses import dataclass
+from internal.exception import NotFoundException
 
 from injector import inject
 
@@ -38,6 +39,8 @@ class BuiltinAppService(BaseService):
 
         # 获取内置应用模板
         builtin_app = self.builtin_app_manager.get_builtin_app(builtin_app_id)
+        if builtin_app is None:
+            raise NotFoundException("内置应用模板不存在")
         # 创建APP添加到数据库
         with self.db.auto_commit():
             app = App(account_id=account.id, status=AppStatus.DRAFT,
@@ -60,6 +63,6 @@ class BuiltinAppService(BaseService):
             self.db.session.flush()
 
             # 草稿配置关联到APP
-            app.app_config_id = draft_app_config.id
+            app.draft_app_config_id = draft_app_config.id
 
             return app

@@ -60,7 +60,7 @@ def test_other_account_cannot_read_update_or_delete_resource(client, other_accou
     record = models[resource](id=uuid4(), account_id=other_account.id)
     if resource == "openapi/api-keys": record.api_key = "llmops-v1/other-account"
     db_session.add(record)
-    db_session.flush()
+    db_session.commit()
     rid = record.id
     listing = assert_success(client.get(f"/{resource}"))
     assert all(item["id"] != str(rid) for item in listing["data"]["list"])

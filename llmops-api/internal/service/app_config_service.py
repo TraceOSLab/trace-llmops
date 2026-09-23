@@ -7,13 +7,14 @@
 """
 
 from dataclasses import dataclass
+from copy import deepcopy
 from typing import Any, Union
 from uuid import UUID
 
 from flask import request
 from injector import inject
 from langchain_core.tools import BaseTool
-from requests.utils import DEFAULT_ACCEPT_ENCODING
+from internal.exception import FailException, NotFoundException
 
 from internal.core.language_model.entities.model_entity import ModelParameterType
 from internal.core.language_model.language_model_manager import LanguageModelManager
@@ -49,84 +50,25 @@ class AppConfigService(BaseService):
     language_model_manager: LanguageModelManager
 
     def get_app_config(self, app: App) -> dict[str, Any]:
-        """获取该应用的运行配置"""
-        app_config = app.app_config
-
-        # 校验 model_config 配置, 如果使用不存在的模型，使用默认值填充 宽松校验
-        validate_model_config = self._process_and_validate_model_config(
-            app_config.model_config
-        )
-        if app_config.model_config != validate_model_config:
-            self.update(app_config, model_config=validate_model_config)
-
-        # 校验工具列表 是否需要更新草稿配置中的工具配置
-        tools, validate_tools = self._process_and_validate_tools(app_config.tools)
-        if app_config.tools != validate_tools:
-            self.update(app_config, tools=validate_tools)
-
-        # 校验知识库列表 是否需要更新草稿配置中的知识库配置
-        app_dataset_joins = app_config.app_dataset_joins
-        origin_datasets = [
-            str(app_dataset_join.dataset_id) for app_dataset_join in app_dataset_joins
-        ]
-        datasets, validate_datasets = self._process_and_validate_datasets(
-            origin_datasets
-        )
-
-        # 6.判断是否存在已删除的知识库，如果存在则更新
-        for dataset_id in set(origin_datasets) - set(validate_datasets):
-            with self.db.auto_commit():
-                self.db.session.query(AppDatasetJoin).filter(
-                    AppDatasetJoin.dataset_id == dataset_id
-                ).delete()
-
-        # 校验工作流列表
-        workflows, validate_workflows = self._process_and_validate_workflows(
-            app_config.workflows
-        )
-        if set(validate_workflows) != set(app_config.workflows):
-            self.update(app_config, workflows=validate_workflows)
-
-        return self._process_and_transformer_app_config(
-            validate_model_config, tools, workflows, datasets, app_config
-        )
+        """读取运行配置；过滤失效引用，不在读取时改写已发布快照。"""
+        config = app.app_config
+        if config is None:
+            raise FailException("应用运行配置不存在")
+        dataset_ids = [str(join.dataset_id) for join in config.app_dataset_joins]
+        return self._resolve_app_config(app, config, dataset_ids)
 
     def get_draft_app_config(self, app: App) -> dict[str, Any]:
-        """获取该应用的草稿配置"""
+        config = app.draft_app_config
+        return self._resolve_app_config(app, config, config.datasets)
 
-        draft_app_config = app.draft_app_config
-
-        # 校验 model_config 配置, 如果使用不存在的模型，使用默认值填充 宽松校验
-        validate_model_config = self._process_and_validate_model_config(
-            draft_app_config.model_config
-        )
-        if draft_app_config.model_config != validate_model_config:
-            self.update(draft_app_config, model_config=validate_model_config)
-
-        # 校验工具列表 是否需要更新草稿配置中的工具配置
-        tools, validate_tools = self._process_and_validate_tools(draft_app_config.tools)
-
-        # 判断是否需要更新草稿配置中的工具列表信息
-        if draft_app_config.tools != validate_tools:
-            self.update(draft_app_config, tools=validate_tools)
-
-        # 校验知识库列表 是否需要更新草稿配置中的知识库配置
-        datasets, validate_datasets = self._process_and_validate_datasets(
-            draft_app_config.datasets
-        )
-        if set(validate_datasets) != set(draft_app_config.datasets):
-            self.update(draft_app_config, datasets=validate_datasets)
-
-        # 校验工作流列表
-        workflows, validate_workflows = self._process_and_validate_workflows(
-            draft_app_config.workflows
-        )
-        if set(validate_workflows) != set(draft_app_config.workflows):
-            self.update(draft_app_config, workflows=validate_workflows)
-
-        return self._process_and_transformer_app_config(
-            validate_model_config, tools, workflows, datasets, draft_app_config
-        )
+    def _resolve_app_config(self, app: App, config, dataset_ids) -> dict[str, Any]:
+        model = self._process_and_validate_model_config(config.model_config)
+        tools, _ = self._process_and_validate_tools(config.tools, app.account_id)
+        datasets, _ = self._process_and_validate_datasets(dataset_ids, app.account_id)
+        workflows, _ = self._process_and_validate_workflows(config.workflows, app.account_id)
+        return deepcopy(self._process_and_transformer_app_config(
+            model, tools, workflows, datasets, config,
+        ))
 
     def get_langchain_tools_by_tools_config(
         self, tools_config: list[dict]
@@ -225,12 +167,14 @@ class AppConfigService(BaseService):
         }
 
     def _process_and_validate_datasets(
-        self, origin_datasets: list[dict]
+        self, origin_datasets: list[dict], account_id: UUID
     ) -> tuple[list[dict], list[dict]]:
         """对知识库进行校验和处理"""
         datasets = []
         dataset_records = (
-            self.db.session.query(Dataset).filter(Dataset.id.in_(origin_datasets)).all()
+            self.db.session.query(Dataset).filter(
+                Dataset.id.in_(origin_datasets), Dataset.account_id == account_id,
+            ).all()
         )
         dataset_dict = {
             str(dataset_record.id): dataset_record for dataset_record in dataset_records
@@ -256,7 +200,7 @@ class AppConfigService(BaseService):
         return datasets, validate_datasets
 
     def _process_and_validate_tools(
-        self, origin_tools: list[dict]
+        self, origin_tools: list[dict], account_id: UUID
     ) -> tuple[list[dict], list[dict]]:
         """对工具信息进行校验和处理"""
 
@@ -321,6 +265,7 @@ class AppConfigService(BaseService):
                     .filter(
                         ApiTool.provider_id == tool["provider_id"],
                         ApiTool.name == tool["tool_id"],
+                        ApiTool.account_id == account_id,
                     )
                     .one_or_none()
                 )
@@ -330,6 +275,9 @@ class AppConfigService(BaseService):
                 # 校验通过 添加数据
                 validate_tools.append(tool)
                 provider = tool_record.provider
+                if provider is None or provider.account_id != account_id:
+                    validate_tools.pop()
+                    continue
                 tools.append(
                     {
                         "type": "api_tool",
@@ -356,7 +304,7 @@ class AppConfigService(BaseService):
     ) -> dict[str, Any]:
         """根据传递的模型配置处理并校验，随后返回校验后的信息"""
         if not isinstance(origin_model_config, dict):
-            return DEFAULT_APP_CONFIG["model_config"]
+            return deepcopy(DEFAULT_APP_CONFIG["model_config"])
 
         model_config = {
             "parameters": origin_model_config.get("parameters", {}),
@@ -368,17 +316,26 @@ class AppConfigService(BaseService):
         if not model_config["provider"] or not isinstance(
             model_config["provider"], str
         ):
-            return DEFAULT_APP_CONFIG["model_config"]
-        provider = self.language_model_manager.get_provider(model_config["provider"])
+            return deepcopy(DEFAULT_APP_CONFIG["model_config"])
+        try:
+            provider = self.language_model_manager.get_provider(model_config["provider"])
+        except NotFoundException:
+            return deepcopy(DEFAULT_APP_CONFIG["model_config"])
         if not provider:
-            return DEFAULT_APP_CONFIG["model_config"]
+            return deepcopy(DEFAULT_APP_CONFIG["model_config"])
 
         # model 是否合规，否则返回默认值
         if not model_config["model"] or not isinstance(model_config["model"], str):
-            return DEFAULT_APP_CONFIG["model_config"]
-        model_entity = provider.get_model_entity(model_config["model"])
+            return deepcopy(DEFAULT_APP_CONFIG["model_config"])
+        try:
+            model_entity = provider.get_model_entity(model_config["model"])
+        except NotFoundException:
+            return deepcopy(DEFAULT_APP_CONFIG["model_config"])
         if not model_entity:
-            return DEFAULT_ACCEPT_ENCODING["model_config"]
+            return deepcopy(DEFAULT_APP_CONFIG["model_config"])
+
+        if not isinstance(model_config["parameters"], dict):
+            model_config["parameters"] = {}
 
         # parameters 是否合规，否则返回默认值
         parameters = {}
@@ -426,7 +383,7 @@ class AppConfigService(BaseService):
         return model_config
 
     def _process_and_validate_workflows(
-        self, origin_workflows: list[UUID]
+        self, origin_workflows: list[UUID], account_id: UUID
     ) -> tuple[list[dict], list[UUID]]:
         """工作流配置 提取数据 获取工作流信息"""
         workflows = []
@@ -434,6 +391,7 @@ class AppConfigService(BaseService):
             self.db.session.query(Workflow)
             .filter(
                 Workflow.id.in_(origin_workflows),
+                Workflow.account_id == account_id,
                 Workflow.status == WorkflowStatus.PUBLISHED,
             )
             .all()
