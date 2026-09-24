@@ -25,6 +25,7 @@ from .language_model_handler import LanguageModelHandler
 from .assistant_agent_handler import AssistantAgentHandler
 from .analysis_handler import AnalysisService
 from .web_app_handler import WebAppHandler
+from .conversation_handler import ConversationHandler
 
 __all__ = [
     "AuthHandler",
@@ -46,4 +47,5 @@ __all__ = [
     "AssistantAgentHandler",
     "AnalysisService",
     "WebAppHandler",
+    "ConversationHandler",
 ]

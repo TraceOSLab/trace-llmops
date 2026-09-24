@@ -29,9 +29,10 @@ from internal.handler import (
     WorkflowHandler,
     LanguageModelHandler,
     AssistantAgentHandler,
+    AnalysisService,
     WebAppHandler,
+    ConversationHandler,
 )
-from internal.handler.analysis_handler import AnalysisHander
 
 
 @inject
@@ -56,8 +57,9 @@ class Router:
     workflow_handler: WorkflowHandler
     language_model_handler: LanguageModelHandler
     assistant_agent_handler: AssistantAgentHandler
-    analysis_handler: AnalysisHander
+    analysis_handler: AnalysisService
     web_app_handler: WebAppHandler
+    conversation_handler: ConversationHandler
 
     def register_router(self, app: Flask):
         """注册路由"""
@@ -522,6 +524,36 @@ class Router:
         bp.add_url_rule(
             "/web-apps/<string:token>/conversations",
             view_func=self.web_app_handler.get_conversations,
+        )
+
+        # 会话模块
+        bp.add_url_rule(
+            "/conversations/<uuid:conversation_id>/name",
+            view_func=self.conversation_handler.get_conversation_name,
+        )
+        bp.add_url_rule(
+            "/conversations/<uuid:conversation_id>/name",
+            methods=["POST"],
+            view_func=self.conversation_handler.update_conversation_name,
+        )
+        bp.add_url_rule(
+            "/conversations/<uuid:conversation_id>/messages",
+            view_func=self.conversation_handler.get_conversation_messages_with_page,
+        )
+        bp.add_url_rule(
+            "/conversations/<uuid:conversation_id>/is-pinned",
+            methods=["POST"],
+            view_func=self.conversation_handler.update_conversation_is_pinned,
+        )
+        bp.add_url_rule(
+            "/conversations/<uuid:conversation_id>/messages/<uuid:message_id>/delete",
+            methods=["POST"],
+            view_func=self.conversation_handler.delete_message,
+        )
+        bp.add_url_rule(
+            "/conversations/<uuid:conversation_id>/delete",
+            methods=["POST"],
+            view_func=self.conversation_handler.delete_conversation,
         )
 
         # 在应用上注册蓝图
