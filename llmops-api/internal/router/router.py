@@ -161,8 +161,6 @@ class Router:
             "/apps/<uuid:app_id>/publish-histories",
             view_func=self.app_handler.get_publish_histories_with_page,
         )
-
-        # 应用管理 会话管理相关
         bp.add_url_rule(
             "/apps/<uuid:app_id>/summary",
             view_func=self.app_handler.get_debug_conversation_summary,
@@ -173,14 +171,16 @@ class Router:
             view_func=self.app_handler.update_debug_conversation_summary,
         )
         bp.add_url_rule(
-            "/apps/<uuid:app_id>/conversations/delete-debug-conversation",
-            methods=["POST"],
-            view_func=self.app_handler.delete_debug_conversation,
+            "/apps/<uuid:app_id>/published-config",
+            view_func=self.app_handler.get_published_config,
         )
         bp.add_url_rule(
-            "/apps/<uuid:app_id>/conversations/messages",
-            view_func=self.app_handler.get_debug_conversation_messages_with_page,
+            "/apps/<uuid:app_id>/published-config/regenerate-web-app-token",
+            methods=["POST"],
+            view_func=self.app_handler.regenerate_web_app_token,
         )
+
+        # 应用管理 会话管理相关
         bp.add_url_rule(
             "/apps/<uuid:app_id>/conversations",
             methods=["POST"],
@@ -192,13 +192,13 @@ class Router:
             view_func=self.app_handler.stop_debug_chat,
         )
         bp.add_url_rule(
-            "/apps/<uuid:app_id>/published-config",
-            view_func=self.app_handler.get_published_config,
+            "/apps/<uuid:app_id>/conversations/messages",
+            view_func=self.app_handler.get_debug_conversation_messages_with_page,
         )
         bp.add_url_rule(
-            "/apps/<uuid:app_id>/published-config/regenerate-web-app-token",
+            "/apps/<uuid:app_id>/conversations/delete-debug-conversation",
             methods=["POST"],
-            view_func=self.app_handler.regenerate_web_app_token,
+            view_func=self.app_handler.delete_debug_conversation,
         )
 
         # 内置应用模块
@@ -514,15 +514,15 @@ class Router:
             methods=["POST"],
             view_func=self.web_app_handler.web_app_chat,
         )
-        # bp.add_url_rule(
-        #     "/web-apps/<string:token>/chat/<uuid:task_id>/stop",
-        #     methods=["POST"],
-        #     view_func=self.web_app_handler.stop_web_app_chat,
-        # )
-        # bp.add_url_rule(
-        #     "/web-apps/<string:token>/conversations",
-        #     view_func=self.web_app_handler.get_conversations,
-        # )
+        bp.add_url_rule(
+            "/web-apps/<string:token>/chat/<uuid:task_id>/stop",
+            methods=["POST"],
+            view_func=self.web_app_handler.stop_web_app_chat,
+        )
+        bp.add_url_rule(
+            "/web-apps/<string:token>/conversations",
+            view_func=self.web_app_handler.get_conversations,
+        )
 
         # 在应用上注册蓝图
         app.register_blueprint(bp)

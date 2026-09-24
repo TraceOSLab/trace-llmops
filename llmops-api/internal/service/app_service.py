@@ -212,7 +212,7 @@ class AppService(BaseService):
             app = self._get_app_for_update(app_id, account)
             for model in (AppDatasetJoin, AppConfigVersion, AppConfig):
                 self.db.session.query(model).filter_by(app_id=app.id).delete()
-            self.db.session.delete (app)
+            self.db.session.delete(app)
         return app
 
     def update_app(self, app_id: uuid.UUID, account: Account, **kwargs) -> App:
@@ -237,8 +237,13 @@ class AppService(BaseService):
 
     def _get_app_for_update(self, app_id: UUID, account: Account) -> App:
         """生命周期写入先锁住应用行，再读取草稿和版本号。"""
-        app = (self.db.session.query(App).filter(App.id == app_id)
-               .populate_existing().with_for_update().one_or_none())
+        app = (
+            self.db.session.query(App)
+            .filter(App.id == app_id)
+            .populate_existing()
+            .with_for_update()
+            .one_or_none()
+        )
         if app is None:
             raise NotFoundException("该应用不存在")
         if app.account_id != account.id:
@@ -246,12 +251,19 @@ class AppService(BaseService):
         return app
 
     def _get_draft_record(self, app: App) -> AppConfigVersion:
-        draft = (self.db.session.query(AppConfigVersion)
-                 .filter_by(app_id=app.id, config_type=AppConfigType.DRAFT)
-                 .populate_existing().one_or_none())
+        draft = (
+            self.db.session.query(AppConfigVersion)
+            .filter_by(app_id=app.id, config_type=AppConfigType.DRAFT)
+            .populate_existing()
+            .one_or_none()
+        )
         if draft is None:
-            draft = AppConfigVersion(app_id=app.id, version=0,
-                                     config_type=AppConfigType.DRAFT, **deepcopy(DEFAULT_APP_CONFIG))
+            draft = AppConfigVersion(
+                app_id=app.id,
+                version=0,
+                config_type=AppConfigType.DRAFT,
+                **deepcopy(DEFAULT_APP_CONFIG),
+            )
             self.db.session.add(draft)
             self.db.session.flush()
         app.draft_app_config_id = draft.id
@@ -266,12 +278,18 @@ class AppService(BaseService):
         with self.db.auto_commit():
             app = self._get_app_for_update(app_id, account)
             values = self._config_values(self._get_draft_record(app))
-            new_app = App(account_id=account.id, name=app.name, icon=app.icon,
-                          description=app.description, status=AppStatus.DRAFT)
+            new_app = App(
+                account_id=account.id,
+                name=app.name,
+                icon=app.icon,
+                description=app.description,
+                status=AppStatus.DRAFT,
+            )
             self.db.session.add(new_app)
             self.db.session.flush()
-            draft = AppConfigVersion(app_id=new_app.id, version=0,
-                                     config_type=AppConfigType.DRAFT, **values)
+            draft = AppConfigVersion(
+                app_id=new_app.id, version=0, config_type=AppConfigType.DRAFT, **values
+            )
             self.db.session.add(draft)
             self.db.session.flush()
             new_app.draft_app_config_id = draft.id
@@ -286,7 +304,9 @@ class AppService(BaseService):
     ) -> AppConfigVersion:
         with self.db.auto_commit():
             app = self._get_app_for_update(app_id, account)
-            values = self._validate_draft_app_config(deepcopy(draft_app_config), account)
+            values = self._validate_draft_app_config(
+                deepcopy(draft_app_config), account
+            )
             draft = self._get_draft_record(app)
             for key, value in values.items():
                 setattr(draft, key, value)
@@ -298,23 +318,39 @@ class AppService(BaseService):
         with self.db.auto_commit():
             app = self._get_app_for_update(app_id, account)
             draft = self._get_draft_record(app)
-            values = self._validate_draft_app_config(self._config_values(draft), account)
-            runtime = AppConfig(app_id=app.id, **deepcopy({
-                key: value for key, value in values.items() if key != "datasets"
-            }))
+            values = self._validate_draft_app_config(
+                self._config_values(draft), account
+            )
+            runtime = AppConfig(
+                app_id=app.id,
+                **deepcopy(
+                    {key: value for key, value in values.items() if key != "datasets"}
+                ),
+            )
             self.db.session.add(runtime)
             self.db.session.flush()
             self.db.session.query(AppDatasetJoin).filter_by(app_id=app.id).delete()
-            self.db.session.add_all([
-                AppDatasetJoin(app_id=app.id, dataset_id=dataset_id)
-                for dataset_id in values["datasets"]
-            ])
-            max_version = (self.db.session.query(func.coalesce(func.max(AppConfigVersion.version), 0))
-                           .filter_by(app_id=app.id, config_type=AppConfigType.PUBLISHED).scalar())
-            self.db.session.add(AppConfigVersion(
-                app_id=app.id, version=max_version + 1,
-                config_type=AppConfigType.PUBLISHED, **deepcopy(values),
-            ))
+            self.db.session.add_all(
+                [
+                    AppDatasetJoin(app_id=app.id, dataset_id=dataset_id)
+                    for dataset_id in values["datasets"]
+                ]
+            )
+            max_version = (
+                self.db.session.query(
+                    func.coalesce(func.max(AppConfigVersion.version), 0)
+                )
+                .filter_by(app_id=app.id, config_type=AppConfigType.PUBLISHED)
+                .scalar()
+            )
+            self.db.session.add(
+                AppConfigVersion(
+                    app_id=app.id,
+                    version=max_version + 1,
+                    config_type=AppConfigType.PUBLISHED,
+                    **deepcopy(values),
+                )
+            )
             for key, value in values.items():
                 setattr(draft, key, deepcopy(value))
             app.app_config_id = runtime.id
@@ -337,12 +373,20 @@ class AppService(BaseService):
     ):
         with self.db.auto_commit():
             app = self._get_app_for_update(app_id, account)
-            history = self.db.session.query(AppConfigVersion).filter_by(
-                id=app_config_version_id, app_id=app.id, config_type=AppConfigType.PUBLISHED,
-            ).one_or_none()
+            history = (
+                self.db.session.query(AppConfigVersion)
+                .filter_by(
+                    id=app_config_version_id,
+                    app_id=app.id,
+                    config_type=AppConfigType.PUBLISHED,
+                )
+                .one_or_none()
+            )
             if history is None:
                 raise NotFoundException("该历史版本不存在")
-            values = self._validate_draft_app_config(self._config_values(history), account)
+            values = self._validate_draft_app_config(
+                self._config_values(history), account
+            )
             draft = self._get_draft_record(app)
             for key, value in values.items():
                 setattr(draft, key, value)
@@ -752,7 +796,9 @@ class AppService(BaseService):
                     try:
                         UUID(tool["provider_id"])
                     except (ValueError, TypeError, AttributeError):
-                        raise ValidateErrorException("插件提供者标识必须是UUID") from None
+                        raise ValidateErrorException(
+                            "插件提供者标识必须是UUID"
+                        ) from None
                     api_tool = (
                         self.db.session.query(ApiTool)
                         .filter(

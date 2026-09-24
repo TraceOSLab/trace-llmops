@@ -137,6 +137,7 @@ class AssistantAgentService(BaseService):
             if completed:
                 save_agent_thoughts()
             else:
+
                 def drain_stream() -> None:
                     try:
                         for agent_thought in agent_stream:
