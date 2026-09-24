@@ -29,7 +29,7 @@ from internal.handler import (
     WorkflowHandler,
     LanguageModelHandler,
     AssistantAgentHandler,
-    AnalysisService,
+    AnalysisHander,
     WebAppHandler,
     ConversationHandler,
 )
@@ -57,7 +57,7 @@ class Router:
     workflow_handler: WorkflowHandler
     language_model_handler: LanguageModelHandler
     assistant_agent_handler: AssistantAgentHandler
-    analysis_handler: AnalysisService
+    analysis_handler: AnalysisHander
     web_app_handler: WebAppHandler
     conversation_handler: ConversationHandler
 

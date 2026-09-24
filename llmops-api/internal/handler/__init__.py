@@ -23,7 +23,7 @@ from .upload_file_handler import UploadFileHandler
 from .workflow_handler import WorkflowHandler
 from .language_model_handler import LanguageModelHandler
 from .assistant_agent_handler import AssistantAgentHandler
-from .analysis_handler import AnalysisService
+from .analysis_handler import AnalysisHander
 from .web_app_handler import WebAppHandler
 from .conversation_handler import ConversationHandler
 
@@ -45,7 +45,7 @@ __all__ = [
     "WorkflowHandler",
     "LanguageModelHandler",
     "AssistantAgentHandler",
-    "AnalysisService",
+    "AnalysisHander",
     "WebAppHandler",
     "ConversationHandler",
 ]

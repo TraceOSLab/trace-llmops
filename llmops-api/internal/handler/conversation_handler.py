@@ -8,6 +8,7 @@ from injector import inject
 from internal.service import ConversationService
 from internal.schema.conversation_schema import (
     GetConversationMessagesWithPageReq,
+    GetConversationMessagesWithPageResp,
     UpdateConversationNameReq,
     UpdateConversationIsPinnedReq,
 )
@@ -35,7 +36,7 @@ class ConversationHandler:
             )
         )
 
-        resp = GetConversationMessagesWithPageReq(many=True)
+        resp = GetConversationMessagesWithPageResp(many=True)
 
         return success_json(PageModel(list=resp.dump(messages), paginator=paginator))
 

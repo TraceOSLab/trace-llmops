@@ -5,7 +5,7 @@ from typing import Generator
 
 from flask import current_app
 from injector import inject
-from langchain.messages import HumanMessage
+from langchain_core.messages import HumanMessage
 from sqlalchemy import desc
 from werkzeug.exceptions import FailedDependency
 
@@ -18,12 +18,14 @@ from internal.entity.app_entity import AppStatus
 from internal.entity.conversation_entity import InvokeFrom, MessageStatus
 from internal.entity.dataset_entity import RetrievalSource
 from internal.exception.exception import FailException, ForbiddenException
-from internal.model import conversation
+from internal.core.language_model import LanguageModelManager
 from internal.model.account import Account
 from internal.model.app import App
 from internal.model.conversation import Conversation, Message
 from internal.schema.web_app_schema import WebAppChatReq
 from .app_config_service import AppConfigService
+from .conversation_service import ConversationService
+from .retrieval_service import RetrievalService
 
 from .base_service import BaseService
 from pkg.sqlalchemy import SQLAlchemy
@@ -36,6 +38,9 @@ class WebAppService(BaseService):
 
     db: SQLAlchemy
     app_config_service: AppConfigService
+    retrieval_service: RetrievalService
+    conversation_service: ConversationService
+    language_model_manager: LanguageModelManager
 
     def get_web_app(self, token: str) -> App:
         """根据TOKEN获取应用"""
@@ -54,8 +59,9 @@ class WebAppService(BaseService):
         app = self.get_web_app(token)
 
         # 校验会话归属信息
+        conversation = None
         if req.conversation_id.data:
-            conversation = self.get(conversation.Conversation, req.conversation_id.data)
+            conversation = self.get(Conversation, req.conversation_id.data)
             if (
                 not conversation
                 or conversation.app_id != app.id
@@ -64,34 +70,8 @@ class WebAppService(BaseService):
                 or conversation.is_deleted is True
             ):
                 raise ForbiddenException("该会话不存在或者不属于当前应用/用户/调用方式")
-        else:
-            # 如果没有传递会话ID则新建会话
-            conversation = self.create(
-                Conversation,
-                **{
-                    "appid": app.id,
-                    "name": "New Converstation",
-                    "invoke_from": InvokeFrom.WEB_APP,
-                    "created_by": account.id,
-                },
-            )
-
-        # 获取当前应用 最新草稿配置
-        app_config = self.app_config_service.get_app_config(app.id, account)
-
-        # 获取当前应用 会话信息
-        conversation = app.conversation
-
-        # 新建消息记录
-        message = self.create(
-            Message,
-            app_id=app.id,
-            conversation_id=conversation.id,
-            invoke_from=InvokeFrom.WEB_APP,
-            created_by=account.id,
-            query=req.query.data,
-            status=MessageStatus.NORMAL,
-        )
+        # 获取当前应用的已发布运行配置
+        app_config = self.app_config_service.get_app_config(app)
 
         # 根据配置实例化模型
         llm = self.language_model_manager.create_language_model(
@@ -145,6 +125,25 @@ class WebAppService(BaseService):
             ),
         )
 
+        # 运行所需的配置、模型和工具已就绪后，再创建会话与待保存的消息。
+        if conversation is None:
+            conversation = self.create(
+                Conversation,
+                app_id=app.id,
+                name="New Conversation",
+                invoke_from=InvokeFrom.WEB_APP,
+                created_by=account.id,
+            )
+        message = self.create(
+            Message,
+            app_id=app.id,
+            conversation_id=conversation.id,
+            invoke_from=InvokeFrom.WEB_APP,
+            created_by=account.id,
+            query=req.query.data,
+            status=MessageStatus.NORMAL,
+        )
+
         # 执行智能体。客户端断开时，后台 Agent 仍可能继续产生终止事件；
         # 保留同一个 iterator 供后台排空，避免已创建的消息永久没有答案或终止状态。
         agent_thoughts = {}
@@ -181,26 +180,29 @@ class WebAppService(BaseService):
                 "task_id": str(agent_thought.task_id),
             }
 
-        completed = False
-        try:
-            for agent_thought in agent_stream:
-                data = consume(agent_thought)
-                yield f"event: {agent_thought.event.value}\ndata: {json.dumps(data)}\n\n"
-            completed = True
-        finally:
-            if completed:
-                save_agent_thoughts()
-            else:
-                # GeneratorExit（客户端断连）时继续消费 Agent 的进程内队列，
-                # 等正常/错误/停止终止事件出现后再持久化完整或部分结果。
-                def drain_stream() -> None:
-                    try:
-                        for agent_thought in agent_stream:
-                            consume(agent_thought)
-                    finally:
-                        save_agent_thoughts()
+        def generate() -> Generator:
+            completed = False
+            try:
+                for agent_thought in agent_stream:
+                    data = consume(agent_thought)
+                    yield f"event: {agent_thought.event.value}\ndata: {json.dumps(data)}\n\n"
+                completed = True
+            finally:
+                if completed:
+                    save_agent_thoughts()
+                else:
+                    # GeneratorExit（客户端断连）时继续消费 Agent 的进程内队列，
+                    # 等正常/错误/停止终止事件出现后再持久化完整或部分结果。
+                    def drain_stream() -> None:
+                        try:
+                            for agent_thought in agent_stream:
+                                consume(agent_thought)
+                        finally:
+                            save_agent_thoughts()
 
-                Thread(target=drain_stream, kwargs={}).start()
+                    Thread(target=drain_stream, kwargs={}).start()
+
+        return generate()
 
     def stop_debug_chat(self, token: str, task_id: str, account: Account):
         """WEBAPP 关闭指定任务会话"""
@@ -213,7 +215,7 @@ class WebAppService(BaseService):
 
         conversations = (
             self.db.session.query(Conversation)
-            .filte(
+            .filter(
                 Conversation.app_id == app.id,
                 Conversation.created_by == account.id,
                 Conversation.invoke_from == InvokeFrom.WEB_APP,

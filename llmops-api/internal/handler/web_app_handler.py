@@ -2,7 +2,6 @@ from dataclasses import dataclass
 
 from flask import request
 from flask_login import current_user, login_required
-from huggingface_hub import login
 from injector import inject
 
 from internal.schema.web_app_schema import (
@@ -40,7 +39,9 @@ class WebAppHandler:
         req = WebAppChatReq()
         if not req.validate():
             return validate_error_json(req.errors)
-        response = self.web_app_service.web_app_chat(token, req, current_user)
+        response = self.web_app_service.web_app_chat(
+            token, req, current_user._get_current_object()
+        )
         return compact_generate_response(response)
 
     @login_required

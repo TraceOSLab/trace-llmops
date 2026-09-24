@@ -6,7 +6,7 @@
 @Author :   s.qiu@foxmail.com
 """
 
-import datetime
+from datetime import datetime
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -34,7 +34,7 @@ from internal.entity.conversation_entity import (
     SuggestedQuestions,
     InvokeFrom,
 )
-from internal.exception.exception import NotFoundException
+from internal.exception.exception import NotFoundException, ValidateErrorException
 from internal.model.account import Account
 from internal.schema.conversation_schema import GetConversationMessagesWithPageReq
 from internal.model import Conversation, Message, MessageAgentThought
@@ -85,13 +85,19 @@ class ConversationService(BaseService):
         paginator = Paginator(db=self.db, req=req)
         filters = []
         if req.created_at.data:
-            created_at_datetime = datetime.fromtimestamp(req.created_at.data)
+            try:
+                created_at_datetime = datetime.fromtimestamp(req.created_at.data)
+            except (OverflowError, OSError, ValueError) as exc:
+                raise ValidateErrorException("created_at游标格式错误") from exc
             filters.append(Message.created_at <= created_at_datetime)
 
         messages = paginator.paginate(
             self.db.session.query(Message)
             .filter(
                 Message.conversation_id == conversation.id,
+                Message.app_id == conversation.app_id,
+                Message.invoke_from == conversation.invoke_from,
+                Message.created_by == conversation.created_by,
                 Message.status.in_([MessageStatus.STOP, MessageStatus.NORMAL]),
                 Message.answer != "",
                 ~Message.is_deleted,
@@ -123,7 +129,11 @@ class ConversationService(BaseService):
         message = self.get_message(message_id, account)
 
         # 判断消息和会话是否关联
-        if conversation.id != message.conversation_id:
+        if (
+            conversation.id != message.conversation_id
+            or conversation.app_id != message.app_id
+            or conversation.invoke_from != message.invoke_from
+        ):
             raise NotFoundException("该会话下不存在该消息，请核实后重试")
 
         # 校验通过修改消息is_deleted属性标记删除
