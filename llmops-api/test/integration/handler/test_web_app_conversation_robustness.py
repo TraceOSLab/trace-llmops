@@ -20,21 +20,56 @@ def _published_app(client, db_session):
     return app, app.token
 
 
-def test_web_app_chat_persists_its_own_conversation_and_reuses_it(client, db_session, account, handler_for, monkeypatch):
-    from internal.service import web_app_service as module
+@pytest.mark.parametrize("shared_app", [False, True])
+def test_web_app_chat_persists_its_own_conversation_and_reuses_it(
+    client, db_session, account, other_account, handler_for, monkeypatch, shared_app
+):
+    from internal.service import chat_runtime as module
 
     app, token = _published_app(client, db_session)
     service = handler_for("web_app_chat").web_app_service
-    monkeypatch.setattr(type(service.language_model_manager), "create_language_model", lambda self, _: object())
-    monkeypatch.setattr(service.app_config_service, "get_langchain_tools_by_tools_config", lambda _: [])
+    if shared_app:
+        # 当前登录者仍是访问者 account，应用及其资源属于另一个账号。
+        app.account_id = other_account.id
+        db_session.flush()
+    owner_id = app.account_id
+    config = service.app_config_service.get_app_config(app)
+    config["datasets"] = [{"id": str(uuid4())}]
+    monkeypatch.setattr(service.app_config_service, "get_app_config", lambda _: config)
+    retrieval_owners = []
+
+    def retrieval_tool(**kwargs):
+        retrieval_owners.append(kwargs["account_id"])
+        from langchain_core.tools import StructuredTool
+
+        return StructuredTool.from_function(
+            lambda query: "result", name="search", description="Fake search"
+        )
+
+    monkeypatch.setattr(
+        service.retrieval_service, "create_langchain_tool_from_search", retrieval_tool
+    )
+    monkeypatch.setattr(
+        type(service.language_model_manager),
+        "create_language_model",
+        lambda self, _: object(),
+    )
+    monkeypatch.setattr(
+        service.app_config_service, "get_langchain_tools_by_tools_config", lambda _: []
+    )
 
     class FakeAgent:
         def __init__(self, **kwargs):
-            pass
+            assert kwargs["agent_config"].user_id == account.id
 
         def stream(self, _):
             task_id = uuid4()
-            yield AgentThought(id=uuid4(), task_id=task_id, event=QueueEvent.AGENT_MESSAGE, answer="answer")
+            yield AgentThought(
+                id=uuid4(),
+                task_id=task_id,
+                event=QueueEvent.AGENT_MESSAGE,
+                answer="answer",
+            )
             yield AgentThought(id=uuid4(), task_id=task_id, event=QueueEvent.AGENT_END)
 
     class InlineThread:
@@ -50,19 +85,38 @@ def test_web_app_chat_persists_its_own_conversation_and_reuses_it(client, db_ses
     first = client.post(f"/web-apps/{token}/chat", json={"query": "hello"})
     assert first.mimetype == "text/event-stream"
     frames = first.get_data(as_text=True)
-    payload = json.loads(next(line[6:] for line in frames.splitlines() if line.startswith("data: ")))
+    payload = json.loads(
+        next(line[6:] for line in frames.splitlines() if line.startswith("data: "))
+    )
     conversation_id = UUID(payload["conversation_id"])
     message_id = UUID(payload["message_id"])
     saved = db_session.get(Conversation, conversation_id)
     assert saved.app_id == app.id and saved.created_by == account.id
     assert saved.invoke_from == "web_app" and not saved.is_deleted
     assert db_session.get(Message, message_id).answer == "answer"
-    assert db_session.query(MessageAgentThought).filter_by(message_id=message_id).count() == 1
+    assert (
+        db_session.query(MessageAgentThought).filter_by(message_id=message_id).count()
+        == 1
+    )
 
-    second = client.post(f"/web-apps/{token}/chat", json={"query": "again", "conversation_id": str(conversation_id)})
-    second_payload = json.loads(next(line[6:] for line in second.get_data(as_text=True).splitlines() if line.startswith("data: ")))
+    second = client.post(
+        f"/web-apps/{token}/chat",
+        json={"query": "again", "conversation_id": str(conversation_id)},
+    )
+    second_payload = json.loads(
+        next(
+            line[6:]
+            for line in second.get_data(as_text=True).splitlines()
+            if line.startswith("data: ")
+        )
+    )
     assert second_payload["conversation_id"] == str(conversation_id)
-    assert db_session.query(Conversation).filter_by(app_id=app.id, created_by=account.id, invoke_from="web_app").count() == 1
+    assert (
+        db_session.query(Conversation)
+        .filter_by(app_id=app.id, created_by=account.id, invoke_from="web_app")
+        .count()
+        == 1
+    )
 
     disconnected = client.post(
         f"/web-apps/{token}/chat",
@@ -74,26 +128,77 @@ def test_web_app_chat_persists_its_own_conversation_and_reuses_it(client, db_ses
             break
     disconnected.close()
     db_session.expire_all()
-    assert db_session.query(Message).filter_by(conversation_id=conversation_id, answer="answer").count() == 3
+    assert (
+        db_session.query(Message)
+        .filter_by(conversation_id=conversation_id, answer="answer")
+        .count()
+        == 3
+    )
+    assert retrieval_owners == [owner_id] * 3
+    assert (
+        db_session.query(Message)
+        .filter_by(conversation_id=conversation_id, created_by=account.id)
+        .count()
+        == 3
+    )
 
 
-def test_web_app_listing_stop_and_conversation_routes_enforce_owner_and_soft_delete(client, db_session, account, other_account, handler_for, monkeypatch):
+def test_web_app_listing_stop_and_conversation_routes_enforce_owner_and_soft_delete(
+    client, db_session, account, other_account, handler_for, monkeypatch
+):
     app, token = _published_app(client, db_session)
-    own = Conversation(id=uuid4(), app_id=app.id, created_by=account.id, invoke_from="web_app", name="Own")
-    foreign = Conversation(id=uuid4(), app_id=app.id, created_by=other_account.id, invoke_from="web_app", name="Private")
-    pinned = Conversation(id=uuid4(), app_id=app.id, created_by=account.id, invoke_from="web_app", name="Pinned", is_pinned=True)
+    own = Conversation(
+        id=uuid4(),
+        app_id=app.id,
+        created_by=account.id,
+        invoke_from="web_app",
+        name="Own",
+    )
+    foreign = Conversation(
+        id=uuid4(),
+        app_id=app.id,
+        created_by=other_account.id,
+        invoke_from="web_app",
+        name="Private",
+    )
+    pinned = Conversation(
+        id=uuid4(),
+        app_id=app.id,
+        created_by=account.id,
+        invoke_from="web_app",
+        name="Pinned",
+        is_pinned=True,
+    )
     db_session.add_all([own, foreign, pinned])
     db_session.flush()
-    message = Message(id=uuid4(), app_id=app.id, conversation_id=own.id, created_by=account.id,
-                      invoke_from="web_app", query="Q", answer="A", status="normal")
-    mismatched = Message(id=uuid4(), app_id=uuid4(), conversation_id=own.id, created_by=account.id,
-                         invoke_from="service_api", query="Private", answer="Private", status="normal")
+    message = Message(
+        id=uuid4(),
+        app_id=app.id,
+        conversation_id=own.id,
+        created_by=account.id,
+        invoke_from="web_app",
+        query="Q",
+        answer="A",
+        status="normal",
+    )
+    mismatched = Message(
+        id=uuid4(),
+        app_id=uuid4(),
+        conversation_id=own.id,
+        created_by=account.id,
+        invoke_from="service_api",
+        query="Private",
+        answer="Private",
+        status="normal",
+    )
     db_session.add_all([message, mismatched])
     db_session.flush()
 
     listed = assert_success(client.get(f"/web-apps/{token}/conversations"))["data"]
     assert {item["id"] for item in listed} == {str(own.id)}
-    pinned_list = assert_success(client.get(f"/web-apps/{token}/conversations?is_pinned=true"))["data"]
+    pinned_list = assert_success(
+        client.get(f"/web-apps/{token}/conversations?is_pinned=true")
+    )["data"]
     assert {item["id"] for item in pinned_list} == {str(pinned.id)}
     for method, path in [
         ("get", f"/conversations/{foreign.id}/name"),
@@ -102,61 +207,126 @@ def test_web_app_listing_stop_and_conversation_routes_enforce_owner_and_soft_del
         ("post", f"/conversations/{foreign.id}/delete"),
         ("post", f"/conversations/{foreign.id}/is-pinned"),
     ]:
-        response = getattr(client, method)(path, json={"name": "changed", "is_pinned": True} if method == "post" else None)
+        response = getattr(client, method)(
+            path,
+            json={"name": "changed", "is_pinned": True} if method == "post" else None,
+        )
         assert response.get_json()["code"] == "not_found"
     assert db_session.get(Conversation, foreign.id).name == "Private"
 
-    assert assert_success(client.get(f"/conversations/{own.id}/name"))["data"]["name"] == "Own"
-    assert_success(client.post(f"/conversations/{own.id}/name", json={"name": "Renamed"}))
-    assert_success(client.post(f"/conversations/{own.id}/is-pinned", json={"is_pinned": True}))
+    assert (
+        assert_success(client.get(f"/conversations/{own.id}/name"))["data"]["name"]
+        == "Own"
+    )
+    assert_success(
+        client.post(f"/conversations/{own.id}/name", json={"name": "Renamed"})
+    )
+    assert_success(
+        client.post(f"/conversations/{own.id}/is-pinned", json={"is_pinned": True})
+    )
     assert db_session.get(Conversation, own.id).name == "Renamed"
     assert db_session.get(Conversation, own.id).is_pinned is True
-    messages = assert_success(client.get(f"/conversations/{own.id}/messages", query_string={"created_at": int(datetime.now().timestamp()) + 10}))["data"]
+    messages = assert_success(
+        client.get(
+            f"/conversations/{own.id}/messages",
+            query_string={"created_at": int(datetime.now().timestamp()) + 10},
+        )
+    )["data"]
     assert [item["id"] for item in messages["list"]] == [str(message.id)]
-    assert client.get(f"/conversations/{own.id}/messages", query_string={"created_at": "999999999999999999999"}).get_json()["code"] == "validate_error"
-    assert client.post(f"/conversations/{pinned.id}/messages/{message.id}/delete").get_json()["code"] == "not_found"
-    assert client.post(f"/conversations/{own.id}/messages/{mismatched.id}/delete").get_json()["code"] == "not_found"
+    assert (
+        client.get(
+            f"/conversations/{own.id}/messages",
+            query_string={"created_at": "999999999999999999999"},
+        ).get_json()["code"]
+        == "validate_error"
+    )
+    assert (
+        client.post(
+            f"/conversations/{pinned.id}/messages/{message.id}/delete"
+        ).get_json()["code"]
+        == "not_found"
+    )
+    assert (
+        client.post(
+            f"/conversations/{own.id}/messages/{mismatched.id}/delete"
+        ).get_json()["code"]
+        == "not_found"
+    )
     assert db_session.get(Message, mismatched.id).is_deleted is False
     assert_success(client.post(f"/conversations/{own.id}/messages/{message.id}/delete"))
     assert db_session.get(Message, message.id).is_deleted is True
-    assert assert_success(client.get(f"/conversations/{own.id}/messages"))["data"]["list"] == []
+    assert (
+        assert_success(client.get(f"/conversations/{own.id}/messages"))["data"]["list"]
+        == []
+    )
     assert_success(client.post(f"/conversations/{own.id}/delete"))
     assert db_session.get(Conversation, own.id).is_deleted is True
     assert client.get(f"/conversations/{own.id}/name").get_json()["code"] == "not_found"
 
     stop_calls = []
-    monkeypatch.setattr("internal.service.web_app_service.AgentQueueManager.set_stop_flag", lambda *args: stop_calls.append(args))
+    monkeypatch.setattr(
+        "internal.service.web_app_service.AgentQueueManager.set_stop_flag",
+        lambda *args: stop_calls.append(args),
+    )
     task_id = uuid4()
     assert_success(client.post(f"/web-apps/{token}/chat/{task_id}/stop"))
     assert stop_calls == [(task_id, "web_app", account.id)]
 
 
-def test_web_app_chat_rejects_foreign_or_deleted_conversation(client, db_session, account, other_account):
+def test_web_app_chat_rejects_foreign_or_deleted_conversation(
+    client, db_session, account, other_account
+):
     app, token = _published_app(client, db_session)
     records = [
-        Conversation(id=uuid4(), app_id=app.id, created_by=other_account.id, invoke_from="web_app"),
-        Conversation(id=uuid4(), app_id=app.id, created_by=account.id, invoke_from="web_app", is_deleted=True),
+        Conversation(
+            id=uuid4(),
+            app_id=app.id,
+            created_by=other_account.id,
+            invoke_from="web_app",
+        ),
+        Conversation(
+            id=uuid4(),
+            app_id=app.id,
+            created_by=account.id,
+            invoke_from="web_app",
+            is_deleted=True,
+        ),
     ]
     db_session.add_all(records)
     db_session.flush()
     for record in records:
-        result = client.post(f"/web-apps/{token}/chat", json={"query": "hello", "conversation_id": str(record.id)})
+        result = client.post(
+            f"/web-apps/{token}/chat",
+            json={"query": "hello", "conversation_id": str(record.id)},
+        )
         assert result.get_json()["code"] == "forbidden"
-    invalid = client.post(f"/web-apps/{token}/chat", json={"query": "hello", "conversation_id": "not-a-uuid"})
+    invalid = client.post(
+        f"/web-apps/{token}/chat",
+        json={"query": "hello", "conversation_id": "not-a-uuid"},
+    )
     assert invalid.get_json()["code"] == "validate_error"
     assert db_session.query(Message).filter_by(app_id=app.id).count() == 0
 
 
-def test_web_app_model_setup_failure_does_not_create_empty_message(client, db_session, handler_for, monkeypatch):
+def test_web_app_model_setup_failure_does_not_create_empty_message(
+    client, db_session, handler_for, monkeypatch
+):
     app, token = _published_app(client, db_session)
     service = handler_for("web_app_chat").web_app_service
 
     def fail_model(_self, _config):
         raise RuntimeError("model unavailable")
 
-    monkeypatch.setattr(type(service.language_model_manager), "create_language_model", fail_model)
+    monkeypatch.setattr(
+        type(service.language_model_manager), "create_language_model", fail_model
+    )
     response = client.post(f"/web-apps/{token}/chat", json={"query": "hello"})
 
     assert response.get_json()["code"] == "fail"
     assert db_session.query(Message).filter_by(app_id=app.id).count() == 0
-    assert db_session.query(Conversation).filter_by(app_id=app.id, invoke_from="web_app").count() == 0
+    assert (
+        db_session.query(Conversation)
+        .filter_by(app_id=app.id, invoke_from="web_app")
+        .count()
+        == 0
+    )

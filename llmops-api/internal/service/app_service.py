@@ -6,15 +6,12 @@
 @Author :   s.qiu@foxmail.com
 """
 
-import json
 from copy import deepcopy
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from threading import Thread
 from typing import Any, Generator
 from uuid import UUID
-from flask import current_app
 from injector import inject
 from langchain_classic.prompts import ChatPromptTemplate
 from langchain_classic.schema import StrOutputParser
@@ -23,12 +20,8 @@ from langchain_core.runnables import RunnableParallel
 from redis import Redis
 from sqlalchemy import Uuid, func, desc
 
-from internal.core.agent.agents import FunctionCallAgent, AgentQueueManager
-from internal.core.agent.entities import AgentConfig
-from internal.core.agent.usage import merge_agent_thought, stream_payload
-from internal.core.agent.entities.queue_entity import QueueEvent
+from internal.core.agent.agents import AgentQueueManager
 from internal.core.language_model.entities.model_entity import ModelParameterType
-from internal.core.memory import TokenBufferMemory
 from internal.core.language_model import LanguageModelManager
 from internal.core.tools.api_tools.providers import ApiProviderManager
 from internal.core.tools.builtin_tools.providers import BuiltinProviderManager
@@ -41,7 +34,6 @@ from internal.entity.app_entity import (
     DEFAULT_APP_CONFIG,
 )
 from internal.entity.conversation_entity import InvokeFrom, MessageStatus
-from internal.entity.dataset_entity import RetrievalSource
 from internal.entity.workflow_entity import WorkflowStatus
 from internal.exception import (
     NotFoundException,
@@ -70,6 +62,7 @@ from internal.schema.app_schema import (
 from pkg.paginator import Paginator
 from pkg.sqlalchemy import SQLAlchemy
 from .app_config_service import AppConfigService
+from .chat_runtime import ChatRuntime, prepare_app_agent
 from .base_service import BaseService
 from .conversation_service import ConversationService
 from .retrieval_service import RetrievalService
@@ -486,7 +479,19 @@ class AppService(BaseService):
         # 获取当前应用 会话信息
         debug_conversation = app.debug_conversation
 
-        # 新建消息记录
+        # 运行准备成功后再创建消息。
+        agent, history = prepare_app_agent(
+            db=self.db,
+            language_model_manager=self.language_model_manager,
+            app_config_service=self.app_config_service,
+            retrieval_service=self.retrieval_service,
+            config=draft_app_config,
+            conversation=debug_conversation,
+            resource_owner_id=app.account_id,
+            operator_id=account.id,
+            invoke_from=InvokeFrom.DEBUGGER,
+        )
+
         message = self.create(
             Message,
             app_id=app.id,
@@ -497,116 +502,22 @@ class AppService(BaseService):
             status=MessageStatus.NORMAL,
         )
 
-        # 根据配置实例化模型
-        llm = self.language_model_manager.create_language_model(
-            draft_app_config["model_config"]
+        runtime = ChatRuntime(
+            conversation_service=self.conversation_service,
+            account_id=account.id,
+            app_id=app.id,
+            app_config=draft_app_config,
+            conversation_id=debug_conversation.id,
+            message_id=message.id,
         )
-
-        # 提取短期记忆
-        token_buffer_memory = TokenBufferMemory(
-            db=self.db, conversation=debug_conversation, model_instance=llm
-        )
-        history = token_buffer_memory.get_history_prompt_messages(
-            message_limit=draft_app_config["dialog_round"]
-        )
-
-        tools = self.app_config_service.get_langchain_tools_by_tools_config(
-            draft_app_config["tools"]
-        )
-
-        # 关联知识库 构建 LangChain 知识库检索工具
-        if draft_app_config["datasets"]:
-            dataset_retrieval = (
-                self.retrieval_service.create_langchain_tool_from_search(
-                    flask_app=current_app._get_current_object(),
-                    dataset_ids=[
-                        dataset["id"] for dataset in draft_app_config["datasets"]
-                    ],
-                    account_id=account.id,
-                    retrival_source=RetrievalSource.APP,
-                    **draft_app_config["retrieval_config"],
-                )
-            )
-            tools.append(dataset_retrieval)
-
-        # 检测是否关联工作流，如果关联了工作流则将工作流构建成工具添加到tools中
-        if draft_app_config["workflows"]:
-            workflow_tools = (
-                self.app_config_service.get_langchain_tools_by_workflow_ids(
-                    [workflow["id"] for workflow in draft_app_config["workflows"]]
-                )
-            )
-            tools.extend(workflow_tools)
-
-        # 构建 AGENT 智能体 使用 FUNCTIONCALLAGENT
-        agent = FunctionCallAgent(
-            llm=llm,
-            agent_config=AgentConfig(
-                user_id=account.id,
-                invoke_from=InvokeFrom.DEBUGGER,
-                enable_long_term_memory=draft_app_config["long_term_memory"]["enable"],
-                preset_prompt=draft_app_config["preset_prompt"],
-                review_config=draft_app_config["review_config"],
-                tools=tools,
-            ),
-        )
-
-        # 执行智能体。客户端断开时，后台 Agent 仍可能继续产生终止事件；
-        # 保留同一个 iterator 供后台排空，避免已创建的消息永久没有答案或终止状态。
-        agent_thoughts = {}
-        agent_stream = agent.stream(
+        return runtime.stream(
+            agent,
             {
                 "messages": [HumanMessage(query)],
                 "history": history,
                 "long_term_memory": debug_conversation.summary,
-            }
+            },
         )
-        flask_app = current_app._get_current_object()
-
-        def save_agent_thoughts() -> None:
-            Thread(
-                target=self.conversation_service.save_agent_thoughts,
-                kwargs={
-                    "flask_app": flask_app,
-                    "account_id": account.id,
-                    "app_id": app_id,
-                    "app_config": draft_app_config,
-                    "conversation_id": debug_conversation.id,
-                    "message_id": message.id,
-                    "agent_thoughts": list(agent_thoughts.values()),
-                },
-            ).start()
-
-        def consume(agent_thought):
-            merge_agent_thought(agent_thoughts, agent_thought)
-            return {
-                **stream_payload(agent_thought, agent_thoughts),
-                "id": str(agent_thought.id),
-                "conversation_id": str(debug_conversation.id),
-                "message_id": str(message.id),
-                "task_id": str(agent_thought.task_id),
-            }
-
-        completed = False
-        try:
-            for agent_thought in agent_stream:
-                data = consume(agent_thought)
-                yield f"event: {agent_thought.event.value}\ndata: {json.dumps(data)}\n\n"
-            completed = True
-        finally:
-            if completed:
-                save_agent_thoughts()
-            else:
-                # GeneratorExit（客户端断连）时继续消费 Agent 的进程内队列，
-                # 等正常/错误/停止终止事件出现后再持久化完整或部分结果。
-                def drain_stream() -> None:
-                    try:
-                        for agent_thought in agent_stream:
-                            consume(agent_thought)
-                    finally:
-                        save_agent_thoughts()
-
-                Thread(target=drain_stream, kwargs={}).start()
 
     def get_published_config(self, app_id: UUID, account: Account) -> dict[str, Any]:
         """获取应用发布配置信息"""

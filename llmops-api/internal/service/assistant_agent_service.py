@@ -1,8 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
 from gc import enable
-import json
-from threading import Thread
 from uuid import UUID
 
 from flask import current_app
@@ -16,8 +14,6 @@ from sqlalchemy import desc
 from internal.core.agent.agents.agent_queue_manager import AgentQueueManager
 from internal.core.agent.agents.function_call_agent import FunctionCallAgent
 from internal.core.agent.entities.agent_entity import AgentConfig
-from internal.core.agent.usage import merge_agent_thought, stream_payload
-from internal.core.agent.entities.queue_entity import QueueEvent
 from internal.core.language_model.language_model_manager import LanguageModelManager
 from internal.core.memory.token_buffer_memory import TokenBufferMemory
 from internal.entity.conversation_entity import InvokeFrom, MessageStatus
@@ -29,6 +25,7 @@ from pkg.paginator.paginator import Paginator
 from pkg.sqlalchemy import SQLAlchemy
 from .conversation_service import ConversationService
 from .faiss_service import FaissService
+from .chat_runtime import ChatRuntime
 from .base_service import BaseService
 
 
@@ -51,17 +48,7 @@ class AssistantAgentService(BaseService):
         # 当前辅助智能体会话信息
         conversation = account.assistant_agent_conversation
 
-        # 创建辅助智能体消息
-        message = self.create(
-            Message,
-            app_id=assistant_agent_id,
-            conversation_id=conversation.id,
-            invoke_from=InvokeFrom.ASSISTANT_AGENT,
-            created_by=account.id,
-            query=query,
-            status=MessageStatus.NORMAL,
-        )
-
+        # 运行准备成功后再创建消息。
         # 使用系统默认模型作为LLM
         llm = self.language_model_manager.create_default_language_model(
             {"temperature": 0.7}
@@ -92,60 +79,33 @@ class AssistantAgentService(BaseService):
             ),
         )
 
-        # 提取 agent_thought
-        agent_thoughts = {}
-        agent_stream = agent.stream(
+        message = self.create(
+            Message,
+            app_id=assistant_agent_id,
+            conversation_id=conversation.id,
+            invoke_from=InvokeFrom.ASSISTANT_AGENT,
+            created_by=account.id,
+            query=query,
+            status=MessageStatus.NORMAL,
+        )
+
+        runtime = ChatRuntime(
+            conversation_service=self.conversation_service,
+            account_id=account.id,
+            app_id=assistant_agent_id,
+            app_config={"long_term_memory": {"enable": True}},
+            conversation_id=conversation.id,
+            message_id=message.id,
+            data_prefix="data:",
+        )
+        return runtime.stream(
+            agent,
             {
                 "messages": [HumanMessage(query)],
                 "history": history,
                 "long_term_memory": conversation.summary,
-            }
+            },
         )
-        flask_app = current_app._get_current_object()
-
-        def save_agent_thoughts() -> None:
-            Thread(
-                target=self.conversation_service.save_agent_thoughts,
-                kwargs={
-                    "flask_app": flask_app,
-                    "account_id": account.id,
-                    "app_id": assistant_agent_id,
-                    "app_config": {"long_term_memory": {"enable": True}},
-                    "conversation_id": conversation.id,
-                    "message_id": message.id,
-                    "agent_thoughts": list(agent_thoughts.values()),
-                },
-            ).start()
-
-        def consume(agent_thought):
-            merge_agent_thought(agent_thoughts, agent_thought)
-            return {
-                **stream_payload(agent_thought, agent_thoughts),
-                "id": str(agent_thought.id),
-                "conversation_id": str(conversation.id),
-                "message_id": str(message.id),
-                "task_id": str(agent_thought.task_id),
-            }
-
-        completed = False
-        try:
-            for agent_thought in agent_stream:
-                data = consume(agent_thought)
-                yield f"event: {agent_thought.event.value}\ndata:{json.dumps(data)}\n\n"
-            completed = True
-        finally:
-            if completed:
-                save_agent_thoughts()
-            else:
-
-                def drain_stream() -> None:
-                    try:
-                        for agent_thought in agent_stream:
-                            consume(agent_thought)
-                    finally:
-                        save_agent_thoughts()
-
-                Thread(target=drain_stream, kwargs={}).start()
 
     def stop_assistant_agent_chat(self, task_id: UUID, account: Account):
         """辅助智能体停止会话"""

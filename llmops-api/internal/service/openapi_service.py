@@ -6,25 +6,13 @@
 @Author :   s.qiu@foxmail.com
 """
 
-import json
 from dataclasses import dataclass
-from threading import Thread
-from typing import Generator
-from uuid import UUID
-
-from flask import current_app
 from injector import inject
 from langchain_core.messages import HumanMessage
 
-from internal.core.agent.agents import FunctionCallAgent
-from internal.core.agent.entities import AgentConfig
-from internal.core.agent.usage import merge_agent_thought, stream_payload
-from internal.core.agent.entities.queue_entity import QueueEvent
-from internal.core.memory import TokenBufferMemory
 from internal.core.language_model import LanguageModelManager
 from internal.entity.app_entity import AppStatus
 from internal.entity.conversation_entity import InvokeFrom, MessageStatus
-from internal.entity.dataset_entity import RetrievalSource
 from internal.exception import NotFoundException, ForbiddenException
 from internal.model import Account, EndUser, Conversation, Message
 from internal.schema.openapi_schema import OpenAPIChatReq
@@ -32,6 +20,7 @@ from pkg.response import Response
 from pkg.sqlalchemy import SQLAlchemy
 from .app_config_service import AppConfigService
 from .app_service import AppService
+from .chat_runtime import ChatRuntime, prepare_app_agent
 from .base_service import BaseService
 from .conversation_service import ConversationService
 from .retrieval_service import RetrievalService
@@ -91,7 +80,19 @@ class OpenApiService(BaseService):
         # 获取当前应用的运行配置
         app_config = self.app_config_service.get_app_config(app)
 
-        # 根据用户查询创建消息记录
+        # 运行准备成功后再创建消息，避免模型配置错误留下空消息。
+        agent, history = prepare_app_agent(
+            db=self.db,
+            language_model_manager=self.language_model_manager,
+            app_config_service=self.app_config_service,
+            retrieval_service=self.retrieval_service,
+            config=app_config,
+            conversation=conversation,
+            resource_owner_id=app.account_id,
+            operator_id=account.id,
+            invoke_from=InvokeFrom.SERVICE_API,
+        )
+
         message = self.create(
             Message,
             **{
@@ -104,150 +105,26 @@ class OpenApiService(BaseService):
             },
         )
 
-        # 根据应用配置创建对应 Provider 的模型
-        llm = self.language_model_manager.create_language_model(
-            app_config["model_config"]
-        )
-
-        # 提取短期记忆
-        token_buffer_memory = TokenBufferMemory(
-            db=self.db, conversation=conversation, model_instance=llm
-        )
-        history = token_buffer_memory.get_history_prompt_messages(
-            message_limit=app_config["dialog_round"]
-        )
-
-        # 该应用配置的工具转换为 langchain 工具
-        tools = self.app_config_service.get_langchain_tools_by_tools_config(
-            app_config["tools"]
-        )
-
-        # 是否关联知识库 构建知识库检索 langchain 工具
-        if app_config["datasets"]:
-            dataset_retrieval = (
-                self.retrieval_service.create_langchain_tool_from_search(
-                    flask_app=current_app._get_current_object(),
-                    dataset_ids=[dataset["id"] for dataset in app_config["datasets"]],
-                    account_id=account.id,
-                    retrival_source=RetrievalSource.APP,
-                    **app_config["retrieval_config"],
-                )
-            )
-            tools.append(dataset_retrieval)
-
-        # 是否关联工作流，如果关联了工作流则将工作流构建成工具添加到tools中
-        if app_config["workflows"]:
-            workflow_tools = (
-                self.app_config_service.get_langchain_tools_by_workflow_ids(
-                    [workflow["id"] for workflow in app_config["workflows"]]
-                )
-            )
-            tools.extend(workflow_tools)
-
-        # 构建智能体
-        agent = FunctionCallAgent(
-            llm=llm,
-            agent_config=AgentConfig(
-                user_id=account.id,
-                invoke_from=InvokeFrom.SERVICE_API,
-                enable_long_term_memory=app_config["long_term_memory"]["enable"],
-                preset_prompt=app_config["preset_prompt"],
-                review_config=app_config["review_config"],
-                tools=tools,
-            ),
-        )
-
         agent_state = {
             "messages": [HumanMessage(req.query.data)],
             "long_term_memory": conversation.summary,
             "history": history,
         }
 
-        # 判断传递的 stream 流式响应/块响应
-        if req.stream.data is True:
-            # 处理流式响应
-            agent_thoughts = {}
-
-            def handle_stream(
-                end_user_id: UUID,
-                conversation_id: UUID,
-                message_id: UUID,
-                account_id: UUID,
-                app_id: UUID,
-            ) -> Generator:
-                """函数返回 yield 作为生成器"""
-                agent_stream = agent.stream(agent_state)
-                flask_app = current_app._get_current_object()
-
-                def save_agent_thoughts() -> None:
-                    Thread(
-                        target=self.conversation_service.save_agent_thoughts,
-                        kwargs={
-                            "flask_app": flask_app,
-                            "account_id": account_id,
-                            "app_id": app_id,
-                            "app_config": app_config,
-                            "conversation_id": conversation_id,
-                            "message_id": message_id,
-                            "agent_thoughts": list(agent_thoughts.values()),
-                        },
-                    ).start()
-
-                def consume(agent_thought):
-                    merge_agent_thought(agent_thoughts, agent_thought)
-                    return {
-                        **stream_payload(agent_thought, agent_thoughts),
-                        "id": str(agent_thought.id),
-                        "end_user_id": str(end_user_id),
-                        "conversation_id": str(conversation_id),
-                        "message_id": str(message_id),
-                        "task_id": str(agent_thought.task_id),
-                    }
-
-                completed = False
-                try:
-                    for agent_thought in agent_stream:
-                        data = consume(agent_thought)
-                        yield f"event: {agent_thought.event.value}\ndata: {json.dumps(data)}\n\n"
-                    completed = True
-                finally:
-                    if completed:
-                        save_agent_thoughts()
-                    else:
-                        def drain_stream() -> None:
-                            try:
-                                for agent_thought in agent_stream:
-                                    consume(agent_thought)
-                            finally:
-                                save_agent_thoughts()
-
-                        Thread(target=drain_stream, kwargs={}).start()
-
-            end_user_id = end_user.id
-            conversation_id = conversation.id
-            message_id = message.id
-            account_id = account.id
-            app_id = app.id
-
-            return handle_stream(
-                end_user_id, conversation_id, message_id, account_id, app_id
-            )
-
-        # 块内容输出 并将消息和推理过程添加到数据库
-        agent_result = agent.invoke(agent_state)
-        thread = Thread(
-            target=self.conversation_service.save_agent_thoughts,
-            kwargs={
-                "flask_app": current_app._get_current_object(),
-                "account_id": account.id,
-                "app_id": app.id,
-                "app_config": app_config,
-                "conversation_id": conversation.id,
-                "message_id": message.id,
-                "agent_thoughts": agent_result.agent_thoughts,
-            },
+        runtime = ChatRuntime(
+            conversation_service=self.conversation_service,
+            account_id=account.id,
+            app_id=app.id,
+            app_config=app_config,
+            conversation_id=conversation.id,
+            message_id=message.id,
+            end_user_id=end_user.id,
         )
-        thread.start()
+        if req.stream.data is True:
+            return runtime.stream(agent, agent_state)
+
+        agent_result = agent.invoke(agent_state)
+        runtime.save(agent_result.agent_thoughts)
 
         return Response(
             data={

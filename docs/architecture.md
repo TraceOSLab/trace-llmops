@@ -34,13 +34,13 @@ flowchart LR
 
 ## Agent 与 SSE 数据流
 
-1. Service 创建消息，并加载已发布或草稿状态的应用配置。
+1. Service 校验身份和会话归属；应用调试、公开 API、WebApp 通过 `prepare_app_agent` 准备模型、工具和记忆，辅助 Agent 保留专用模型/工具。准备成功后创建消息。
 2. `FunctionCallAgent` 在后台线程中运行 LangGraph Graph。
 3. Graph Node 将 `AgentThought` 对象写入进程内 Queue。
-4. Service 读取 Queue，并在各自的 Generator 中组装 `event:` 和 JSON `data:`。
-5. Service 使用后台线程在 Flask Application Context 中保存消息和推理过程。
+4. 四个会话入口通过 `chat_runtime.ChatRuntime` 消费事件、合并步骤、编码 SSE；终止事件只输出一次，随后关闭 iterator。OpenAPI 保留非流式响应组装。
+5. `ChatRuntime` 捕获标量身份和配置快照，调用 `ConversationService` 在后台 Flask Application Context 中保存；客户端断连则继续排空同一个 iterator 后保存。
 
-当前没有统一的 SSE 编码器或正式版本化 `StreamEvent`。事件生成分散在 `app_service.py`、`openapi_service.py`、`workflow_service.py`、`ai_service.py` 和部分 Handler 中。
+四个会话入口共用 SSE 编码和保存收尾，保留各自的鉴权、消息归属、OpenAPI `end_user_id` 字段及非流式响应。应用资源按 `app.account_id` 解析，任务归属仍使用操作者账号。Workflow、AI 辅助功能仍使用各自的事件生成器；没有正式版本化 `StreamEvent`。
 
 当前 Queue 位于进程内。Redis 只保存任务归属和停止标记，不保存流式事件。因此一个 Stream 必须留在启动它的 API 进程中，暂不支持多 Worker 共享、重放和断线恢复。
 

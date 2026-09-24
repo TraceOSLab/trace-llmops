@@ -1,6 +1,6 @@
 # Agent 流式事件现状（契约草案）
 
-> 本文记录当前代码行为和未来前端需要关注的兼容面，不代表已经实现了版本化 `StreamEvent`、统一编码器、`sequence` 或事件重放。
+> 本文记录当前代码行为和未来前端需要关注的兼容面，不代表已经实现了版本化 `StreamEvent`、`sequence` 或事件重放。
 
 ## 传输格式
 
@@ -12,7 +12,7 @@ data: {"event":"agent_message","id":"...","conversation_id":"...","message_id":"
 
 ```
 
-当前代码由各 Service 手写 SSE 字符串。应用调试、公开 API、WebApp 和辅助智能体使用 `QueueEvent.value` 作为事件名；这四个生产方共享事件合并和用量序列化函数，但尚未建立统一 SSE 编码器。
+应用调试、公开 API、WebApp 和辅助智能体通过 `internal/service/chat_runtime.py` 的 `ChatRuntime` 统一编码 SSE，使用 `QueueEvent.value` 作为事件名，并复用事件合并和用量序列化函数。保持既有字段和辅助智能体的 `data:` 空白格式；OpenAPI 独有的 `end_user_id` 继续保留。
 
 ## 公共字段
 
@@ -46,7 +46,7 @@ data: {"event":"agent_message","id":"...","conversation_id":"...","message_id":"
 
 这一路径由公开 API、应用调试、WebApp 及辅助智能体共享，不改变事件名或字段。模型返回 HTTP 400（例如 `Prompt exceeds max length`）时，已开始的 SSE 响应通过 `error.observation` 表达失败并结束响应体，不会将已发送的 HTTP 200 改为 400。该处理不自动截断提示词，也不保证取消已经发出的模型请求。调试器暂停进程期间，响应仍需等待恢复执行。
 
-离线回归覆盖真实 LangGraph 后台线程中的模拟模型 400、未处理节点异常、正常/错误/停止/超时终止、重复终止、队列并发初始化，以及 Service 的 SSE 序列化和保存参数。测试使用 Fake Redis 和模型，不访问外部服务。
+离线回归覆盖真实 LangGraph 后台线程中的模拟模型 400、未处理节点异常、正常/错误/停止/超时终止、重复终止、队列并发初始化，以及 Service 的 SSE 序列化和保存参数。公共执行层在终止事件处关闭 iterator 并安排一次保存，不再读取后续事件；异常退出或缺少终止事件时补充既有 `error` 事件，避免部分消息被记为正常完成。模型原有错误事件原样保留，执行层意外异常只返回通用错误信息。测试使用 Fake Redis 和模型，不访问外部服务。
 
 ## 其他流式事件
 
