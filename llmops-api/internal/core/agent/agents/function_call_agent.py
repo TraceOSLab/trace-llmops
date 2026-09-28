@@ -245,15 +245,18 @@ class FunctionCallAgent(BaseAgent):
                 AgentThought(
                     id=id,
                     task_id=state["task_id"],
-                    event=(QueueEvent.AGENT_MESSAGE if generation_type == "message"
-                           else QueueEvent.AGENT_THOUGHT),
+                    event=(
+                        QueueEvent.AGENT_MESSAGE
+                        if generation_type == "message"
+                        else QueueEvent.AGENT_THOUGHT
+                    ),
                     message=messages_to_dict(state["messages"]),
                     usage=usage,
                     **usage.legacy_fields(),
                     latency=time.perf_counter() - start_at,
                 ),
             )
-            logging.exception(f"LLM节点发生错误, 错误信息: {str(e)}")
+            logging.exception("LLM节点发生错误, 错误信息: %(error)s", {"error": e})
             self.agent_queue_manager.publish_error(
                 state["task_id"], f"LLM节点发生错误, 错误信息: {str(e)}"
             )
@@ -262,10 +265,15 @@ class FunctionCallAgent(BaseAgent):
         # 使用供应商返回的用量，禁止拿 GPT 的 tokenizer 重新估算账单。
         usage_message = last_usage_chunk
         if usage_message is not None and gathered is not None:
-            gathered = gathered.model_copy(update={
-                "usage_metadata": usage_message.usage_metadata,
-                "response_metadata": {**gathered.response_metadata, **usage_message.response_metadata},
-            })
+            gathered = gathered.model_copy(
+                update={
+                    "usage_metadata": usage_message.usage_metadata,
+                    "response_metadata": {
+                        **gathered.response_metadata,
+                        **usage_message.response_metadata,
+                    },
+                }
+            )
             usage_message = gathered
         usage = collect_usage(usage_message, self.llm.metadata, started_at)
         # 即使没有可见文本（例如纯思考或空回复），也要结算本次调用。

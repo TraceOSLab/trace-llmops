@@ -63,6 +63,7 @@ class WebAppService(BaseService):
                 or conversation.is_deleted is True
             ):
                 raise ForbiddenException("该会话不存在或者不属于当前应用/用户/调用方式")
+
         # 获取当前应用的已发布运行配置
         app_config = self.app_config_service.get_app_config(app)
 

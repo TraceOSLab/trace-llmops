@@ -73,7 +73,9 @@ class IndexingService(BaseService):
 
             except Exception as e:
                 # 更改状态为失败 并记录日志
-                logging.exception(f"构建文档发生错误，错误信息为：{str(e)}")
+                logging.exception(
+                    "构建文档发生错误，错误信息为：%(error)s", {"error": e}
+                )
                 self.update(
                     document,
                     status=DocumentStatus.ERROR,
@@ -87,8 +89,11 @@ class IndexingService(BaseService):
         """原子地认领等待中的文档，避免重复 Celery 消息重复建索引。"""
         with self.db.auto_commit():
             document = (
-                self.db.session.query(Document).filter_by(id=document_id)
-                .populate_existing().with_for_update().one_or_none()
+                self.db.session.query(Document)
+                .filter_by(id=document_id)
+                .populate_existing()
+                .with_for_update()
+                .one_or_none()
             )
             if document is None or document.status != DocumentStatus.WAITING:
                 return None
@@ -171,11 +176,12 @@ class IndexingService(BaseService):
         """删除指定文档，同步关键词 片段 向量等修改"""
         # 查找文档下的所有片段 ID 列表
         segment_ids = [
-            segment_id for segment_id, in (
-            self.db.session.query(Segment)
-            .with_entities(Segment.id)
-            .filter(Segment.document_id == document_id)
-            .all()
+            segment_id
+            for segment_id, in (
+                self.db.session.query(Segment)
+                .with_entities(Segment.id)
+                .filter(Segment.document_id == document_id)
+                .all()
             )
         ]
 
@@ -205,10 +211,18 @@ class IndexingService(BaseService):
             where=Filter.by_property("dataset_id").equal(str(dataset_id))
         )
         with self.db.auto_commit():
-            self.db.session.query(Document).filter(Document.dataset_id == dataset_id).delete()
-            self.db.session.query(Segment).filter(Segment.dataset_id == dataset_id).delete()
-            self.db.session.query(KeywordTable).filter(KeywordTable.dataset_id == dataset_id).delete()
-            self.db.session.query(DatasetQuery).filter(DatasetQuery.dataset_id == dataset_id).delete()
+            self.db.session.query(Document).filter(
+                Document.dataset_id == dataset_id
+            ).delete()
+            self.db.session.query(Segment).filter(
+                Segment.dataset_id == dataset_id
+            ).delete()
+            self.db.session.query(KeywordTable).filter(
+                KeywordTable.dataset_id == dataset_id
+            ).delete()
+            self.db.session.query(DatasetQuery).filter(
+                DatasetQuery.dataset_id == dataset_id
+            ).delete()
 
     def _parsing(self, document: Document) -> list[LCDocument]:
         """解析传递的文档为LangChain文档列表"""
@@ -352,7 +366,9 @@ class IndexingService(BaseService):
                             }
                         )
                 except Exception as e:
-                    logging.exception(f"构建文档片段索引发生异常，错误信息 {str(e)}")
+                    logging.exception(
+                        "构建文档片段索引发生异常，错误信息 %(error)s", {"error": e}
+                    )
                     with self.db.auto_commit():
                         self.db.session.query(Segment).filter(
                             Segment.node_id.in_(ids)
@@ -379,14 +395,20 @@ class IndexingService(BaseService):
             for future in futures:
                 future.result()
 
-        failed_segments = self.db.session.query(func.count(Segment.id)).filter(
-            Segment.document_id == document.id,
-            Segment.status == SegmentStatus.ERROR,
-        ).scalar()
+        failed_segments = (
+            self.db.session.query(func.count(Segment.id))
+            .filter(
+                Segment.document_id == document.id,
+                Segment.status == SegmentStatus.ERROR,
+            )
+            .scalar()
+        )
         if failed_segments:
             self.update(
-                document, status=DocumentStatus.ERROR,
-                error=f"{failed_segments} 个片段索引失败", stopped_at=datetime.now(),
+                document,
+                status=DocumentStatus.ERROR,
+                error=f"{failed_segments} 个片段索引失败",
+                stopped_at=datetime.now(),
                 enabled=False,
             )
         else:

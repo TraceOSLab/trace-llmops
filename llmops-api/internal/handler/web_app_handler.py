@@ -52,7 +52,7 @@ class WebAppHandler:
 
     @login_required
     def get_conversations(self, token: str):
-        """获取  WEBAPP 下的所有会话列表"""
+        """获取 WEBAPP 下的所有会话列表"""
         # 1.提取请求并校验
         req = GetConversationsReq(request.args)
         if not req.validate():
