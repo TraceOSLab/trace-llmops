@@ -5,6 +5,8 @@
 @Time   :   2025/9/1 13:59
 @Author :   s.qiu@foxmail.com
 """
+
+import os
 import dotenv
 from flask_login import LoginManager
 from flask_migrate import Migrate
@@ -15,6 +17,14 @@ from internal.router import Router
 from internal.server import Http
 from pkg.sqlalchemy import SQLAlchemy
 from .module import injector
+
+if os.environ.get("FLASK_DEBUG") == "0" or os.environ.get("FLASK_ENV") == "production":
+    from gevent import monkey
+
+    monkey.patch_all()
+    import grpc.experimental.gevent
+
+    grpc.experimental.gevent.init_gevent()
 
 # 加载ENV到环境变量
 dotenv.load_dotenv()
