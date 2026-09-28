@@ -8,7 +8,7 @@
 
 import logging
 import os
-from concurrent_log_handler import ConcurrentRotatingFileHandler
+from concurrent_log_handler import ConcurrentTimedRotatingFileHandler
 
 
 def init_app(app):
@@ -28,7 +28,7 @@ def init_app(app):
     log_file = os.path.join(log_folder, "app.log")
 
     # 每天更新一次日志
-    handler = ConcurrentRotatingFileHandler(
+    handler = ConcurrentTimedRotatingFileHandler(
         log_file,
         when="midnight",
         interval=1,
