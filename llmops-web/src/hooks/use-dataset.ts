@@ -105,14 +105,10 @@ export const useDeleteDataset = () => {
         '删除知识库后，关联该知识库的应用将无法再使用该知识库，所有的提示配置和文档都将被永久删除',
       hideCancel: false,
       onOk: async () => {
-        try {
-          // 1.点击确定后向API接口发起请求
-          const resp = await deleteDataset(dataset_id)
-          Message.success(resp.message)
-        } finally {
-          // 2.调用callback函数指定回调功能
-          callback && callback()
-        }
+        // 1.点击确定后向API接口发起请求
+        const resp = await deleteDataset(dataset_id)
+        Message.success(resp.message)
+        callback && callback()
       },
     })
   }
@@ -268,14 +264,10 @@ export const useDeleteDocument = () => {
         '删除文档后，知识库/向量数据库将无法检索到该文档，如需暂时关闭该文档的检索，可以选择禁用功能',
       hideCancel: false,
       onOk: async () => {
-        try {
-          // 1.点击确定后向API接口发起请求
-          const resp = await deleteDocument(dataset_id, document_id)
-          Message.success(resp.message)
-        } finally {
-          // 2.调用callback函数指定回调功能
-          callback && callback()
-        }
+        // 1.点击确定后向API接口发起请求
+        const resp = await deleteDocument(dataset_id, document_id)
+        Message.success(resp.message)
+        callback && callback()
       },
     })
   }
@@ -290,13 +282,9 @@ export const useUpdateDocumentEnabled = () => {
     enabled: boolean,
     callback?: () => void,
   ) => {
-    try {
-      const resp = await updateDocumentEnabled(dataset_id, document_id, enabled)
-      Message.success(resp.message)
-    } finally {
-      // 2.调用callback函数指定回调功能
-      callback && callback()
-    }
+    const resp = await updateDocumentEnabled(dataset_id, document_id, enabled)
+    Message.success(resp.message)
+    callback && callback()
   }
 
   return { handleUpdate }
@@ -415,14 +403,10 @@ export const useDeleteSegment = () => {
         '删除文档文档后，知识库/向量数据库将无法检索到该文档，如需暂时关闭该文档的检索，可以选择禁用功能。',
       hideCancel: false,
       onOk: async () => {
-        try {
-          // 1.点击确定后向API接口发起请求
-          const resp = await deleteSegment(dataset_id, document_id, segment_id)
-          Message.success(resp.message)
-        } finally {
-          // 2.调用callback函数指定回调功能
-          callback && callback()
-        }
+        // 1.点击确定后向API接口发起请求
+        const resp = await deleteSegment(dataset_id, document_id, segment_id)
+        Message.success(resp.message)
+        callback && callback()
       },
     })
   }
@@ -438,13 +422,9 @@ export const useUpdateSegmentEnabled = () => {
     enabled: boolean,
     callback?: () => void,
   ) => {
-    try {
-      const resp = await updateSegmentEnabled(dataset_id, document_id, segment_id, enabled)
-      Message.success(resp.message)
-    } finally {
-      // 2.调用callback函数指定回调功能
-      callback && callback()
-    }
+    const resp = await updateSegmentEnabled(dataset_id, document_id, segment_id, enabled)
+    Message.success(resp.message)
+    callback && callback()
   }
 
   return { handleUpdate }

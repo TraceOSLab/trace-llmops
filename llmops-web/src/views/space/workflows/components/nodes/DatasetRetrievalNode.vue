@@ -107,14 +107,14 @@ const props = defineProps<NodeProps>()
     <handle
       type="source"
       :position="Position.Right"
-      class="!w-4 !h-4 !bg-blue-700 !text-white flex items-center justify-center"
+      class="!w-4 !h-4 !bg-teal-700 !text-white flex items-center justify-center"
     >
       <icon-plus :size="12" class="pointer-events-none" />
     </handle>
     <handle
       type="target"
       :position="Position.Left"
-      class="!w-4 !h-4 !bg-blue-700 !text-white flex items-center justify-center"
+      class="!w-4 !h-4 !bg-teal-700 !text-white flex items-center justify-center"
     >
       <icon-plus :size="12" class="pointer-events-none" />
     </handle>
@@ -124,7 +124,7 @@ const props = defineProps<NodeProps>()
 <style scoped>
 .selected {
   .selected-border {
-    @apply border-blue-700;
+    @apply border-teal-700;
   }
 }
 </style>

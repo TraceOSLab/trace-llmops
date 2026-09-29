@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { get, post } from '@/utils/request'
 import ChatPanel from '@/components/ChatPanel.vue'
+import { Modal } from '@arco-design/web-vue'
 const route = useRoute(),
   token = String(route.params.token),
   app = ref<any>(),
@@ -47,6 +48,14 @@ async function remove(c: any) {
   if (selected.value === c.id) select('')
   await list()
 }
+function confirmRemove(conversation: any) {
+  Modal.warning({
+    title: '删除会话？',
+    content: '删除后无法恢复这段对话。',
+    hideCancel: false,
+    onOk: () => remove(conversation),
+  })
+}
 function openRename(conversation: any) {
   rename.value = conversation
   name.value = conversation.name
@@ -82,9 +91,7 @@ onMounted(load)
           ><template #content
             ><a-doption @click="openRename(c)">重命名</a-doption
             ><a-doption @click="pin(c)">{{ c.pinned ? '取消置顶' : '置顶' }}</a-doption
-            ><a-doption
-              ><a-popconfirm content="删除这段对话？" @ok="remove(c)">删除</a-popconfirm></a-doption
-            ></template
+            ><a-doption @click="confirmRemove(c)">删除</a-doption></template
           ></a-dropdown
         >
       </div>

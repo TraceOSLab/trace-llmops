@@ -1,38 +1,40 @@
-name: ${PROJECT_NAME:-trace-llmops}
-
 services:
   postgres:
     image: postgres:17-alpine
+    container_name: ${PROJECT_NAME}-postgres
+
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-llmops}
-      POSTGRES_USER: ${POSTGRES_USER:-admin}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the root .env file}
-    volumes:
-      - type: bind
-        source: ${DOCKER_DATA_DIR:-./docker/data}/postgres
-        target: /var/lib/postgresql/data
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
       interval: 10s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
-    command: redis-server --appendonly yes
-    volumes:
-      - type: bind
-        source: ${DOCKER_DATA_DIR:-./docker/data}/redis
-        target: /data
+    container_name: ${PROJECT_NAME}-redis
+
+    command:
+      - redis-server
+      - --appendonly
+      - 'yes'
+
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   weaviate:
     image: cr.weaviate.io/semitechnologies/weaviate:1.34.4
+    container_name: ${PROJECT_NAME}-weaviate
+
     environment:
       QUERY_DEFAULTS_LIMIT: 25
-      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: ${WEAVIATE_AUTH:-true}
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: ${WEAVIATE_ANONYMOUS_ACCESS}
       PERSISTENCE_DATA_PATH: /var/lib/weaviate
       CLUSTER_HOSTNAME: node1
-    volumes:
-      - type: bind
-        source: ${DOCKER_DATA_DIR:-./docker/data}/weaviate
-        target: /var/lib/weaviate

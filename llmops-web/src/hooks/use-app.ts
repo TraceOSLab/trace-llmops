@@ -175,14 +175,10 @@ export const useDeleteApp = () => {
         '删除应用后，发布的WebApp、开放API以及关联的社交媒体平台均无法使用该Agent应用，如果需要暂停应用，可使用取消发布功能。',
       hideCancel: false,
       onOk: async () => {
-        try {
-          // 1.点击确定后向API接口发起请求
-          const resp = await deleteApp(app_id)
-          Message.success(resp.message)
-        } finally {
-          // 2.调用callback函数指定回调功能
-          callback && callback()
-        }
+        // 1.点击确定后向API接口发起请求
+        const resp = await deleteApp(app_id)
+        Message.success(resp.message)
+        callback && callback()
       },
     })
   }
@@ -226,10 +222,9 @@ export const useCancelPublish = () => {
           loading.value = true
           const resp = await cancelPublish(app_id)
           Message.success(resp.message)
-        } finally {
-          // 2.3 调用callback函数指定回调功能
-          loading.value = false
           callback && callback()
+        } finally {
+          loading.value = false
         }
       },
     })

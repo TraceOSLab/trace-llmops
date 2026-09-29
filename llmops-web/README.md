@@ -62,6 +62,6 @@ pnpm --dir llmops-web test:e2e
 - `src/utils/request.ts` / `sse.ts` / `chat.ts`：请求、分片解析、聊天步骤及用量合并。
 - `src/utils/draft-queue.ts`：按应用隔离的串行保存与防抖；`workflow-graph.ts`：后端图与 Vue Flow 图转换。
 
-课程 demo 原样保留在相邻目录。业务表单、资源操作和节点配置从课程功能迁移；工作台、导航、登录展示、编排布局、画布容器、发布页、共享聊天及请求/流处理重新实现。详情见 [功能对照表](docs/feature-matrix.md) 与 [实现及验证说明](docs/implementation.md)。
+课程 demo 原样保留在相邻目录。业务表单、资源操作和节点配置从课程功能迁移；工作台、导航、登录展示、编排布局、画布容器、发布页、共享聊天及请求/流处理重新实现。详情见 [功能对照表](docs/feature-matrix.md) 与 [实现说明](docs/implementation.md)、[验证记录](docs/verification.md)。
 
 部署输出为 `dist/`；静态服务器应把前端历史路由回退到 `index.html`。本次不部署站点、不修改基础设施。

@@ -11,7 +11,7 @@ const props = defineProps<NodeProps>()
   >
     <!-- 顶部节点标题 -->
     <div class="flex items-center gap-2">
-      <a-avatar shape="square" :size="24" class="bg-blue-700 rounded-lg flex-shrink-0">
+      <a-avatar shape="square" :size="24" class="bg-teal-700 rounded-lg flex-shrink-0">
         <icon-home :size="16" />
       </a-avatar>
       <div class="text-gray-700 font-semibold">{{ props.data?.title }}</div>
@@ -43,7 +43,7 @@ const props = defineProps<NodeProps>()
     <handle
       type="source"
       :position="Position.Right"
-      class="!w-4 !h-4 !bg-blue-700 !text-white flex items-center justify-center"
+      class="!w-4 !h-4 !bg-teal-700 !text-white flex items-center justify-center"
     >
       <icon-plus :size="12" class="pointer-events-none" />
     </handle>
@@ -53,7 +53,7 @@ const props = defineProps<NodeProps>()
 <style scoped>
 .selected {
   .selected-border {
-    @apply border-blue-700;
+    @apply border-teal-700;
   }
 }
 </style>
