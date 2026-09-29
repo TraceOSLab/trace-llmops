@@ -15,7 +15,7 @@
         "--pool=solo"
       ],
       "options": {
-        "cwd": "${workspaceFolder}"
+        "cwd": "${workspaceFolder}/llmops-api"
       },
       "problemMatcher": [],
       "presentation": {
@@ -38,7 +38,7 @@
         "${input:migrationMessage}"
       ],
       "options": {
-        "cwd": "${workspaceFolder}"
+        "cwd": "${workspaceFolder}/llmops-api"
       },
       "problemMatcher": []
     },
@@ -55,7 +55,7 @@
         "upgrade"
       ],
       "options": {
-        "cwd": "${workspaceFolder}"
+        "cwd": "${workspaceFolder}/llmops-api"
       },
       "problemMatcher": []
     },
@@ -73,7 +73,7 @@
         "${input:downgradeRevision}"
       ],
       "options": {
-        "cwd": "${workspaceFolder}"
+        "cwd": "${workspaceFolder}/llmops-api"
       },
       "problemMatcher": []
     }

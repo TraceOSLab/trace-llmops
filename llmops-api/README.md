@@ -4,7 +4,7 @@ Trace LLMOps 的后端服务。项目使用 Flask、SQLAlchemy、Celery、Redis�
 
 ## 本地开发
 
-推荐直接用 VS Code 打开本目录 `llmops-api/`，不要只打开上一级仓库目录，否则 VS Code 不会自动加载这里的 `.vscode` 配置。
+推荐用 VS Code 打开仓库根目录，使用根目录 `.vscode` 中的 F5 配置调试后端；也可以在仓库根目录运行 `pnpm dev:api`，无需打开 VS Code。
 
 首次准备后端环境；如果本地还没有 `.env`，先从示例创建：
 
@@ -20,7 +20,7 @@ uv sync --locked
 ```bash
 cd ..
 cp .env.example .env
-docker compose -f compose.yaml -f compose.dev.yaml up -d
+docker compose -f compose.yaml -f compose.override.yaml up -d
 ```
 
 随后在 VS Code 的 **Run and Debug** 中选择 `Development (Flask + Celery)` 并按 F5。该复合配置会同时启动可调试的 Flask API 和 Celery Worker；按 `⇧F5` 会一起停止二者。
@@ -36,7 +36,7 @@ docker compose -f compose.yaml -f compose.dev.yaml up -d
 
 ## 终端备用方式
 
-不使用 VS Code 调试器时，需要分别启动两个进程：
+不使用 VS Code 调试器时，从仓库根目录运行 `pnpm dev:api` 会一起启动 Flask 和 Celery。也可以分别运行 `pnpm dev:flask`、`pnpm dev:worker`。
 
 ```bash
 uv run flask --app app.http.app:create_app run --debug

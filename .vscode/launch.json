@@ -6,7 +6,8 @@
       "type": "debugpy",
       "request": "launch",
       "module": "flask",
-      "cwd": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}/llmops-api",
+      "python": "${workspaceFolder}/llmops-api/.venv/bin/python",
       "env": {
         "PYTHONWARNINGS": "ignore::ImportWarning,ignore::UserWarning"
       },
@@ -27,7 +28,8 @@
       "type": "debugpy",
       "request": "launch",
       "module": "celery",
-      "cwd": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}/llmops-api",
+      "python": "${workspaceFolder}/llmops-api/.venv/bin/python",
       "args": [
         "-A",
         "app.http.app:celery",

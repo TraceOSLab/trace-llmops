@@ -4,15 +4,15 @@
 
 - `llmops-api/` 是当前主要开发目录，后端技术栈包括 Flask、SQLAlchemy、Celery、Redis、PostgreSQL、Weaviate、Pydantic v2、LangChain 和 LangGraph。
 - `llmops-web/` 目前只是 Vue/Vite 初始脚手架。在前端正式开发前，不要预设前端规范。
-- 根目录 `compose.yaml` 定义共享基础设施；`compose.dev.yaml` 和 `compose.prod.yaml` 分别覆盖开发和生产差异。
+- 根目录 `compose.yaml` 定义共享基础设施；`compose.override.yaml` 和 `compose.prod.yaml` 分别覆盖开发和生产差异。
 - 修改跨层边界前，先阅读 `docs/architecture.md`。
 
 ## 标准命令
 
-- 后端日常开发以 `llmops-api/.vscode/launch.json` 中的 `Development (Flask + Celery)` VS Code 复合调试配置为首选启动方式；`uv` 负责依赖和终端任务，不要把 `uv run` 描述成唯一启动入口。
+- 后端可通过根目录 `.vscode/launch.json` 中的 `Development (Flask + Celery)` 调试，也可从根目录执行 `pnpm dev:api`；`uv` 管理 Python 依赖和命令行进程。
 - Python 依赖使用 `uv`，前端依赖使用 `pnpm`。
-- 使用 `docker compose -f compose.yaml -f compose.dev.yaml up -d` 启动本地 PostgreSQL、Redis 和 Weaviate。
-- VS Code 应直接打开 `llmops-api/`，或将它作为独立 Workspace Folder；后端的 F5 与 Task 操作见 `docs/runbooks/development.md`。
+- 使用 `docker compose -f compose.yaml -f compose.override.yaml up -d` 启动本地 PostgreSQL、Redis 和 Weaviate。
+- VS Code 应打开仓库根目录；后端的 F5 与 Task 操作见 `docs/runbooks/development.md`。
 - 修改后先运行与改动最相关的最小检查。当前测试依赖真实环境，运行前先确认不会访问付费模型或生产资源。
 
 ## 协作约定

@@ -1,6 +1,6 @@
 // api请求接口前缀
 export const apiPrefix: string = (
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+  import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5000'
 ).replace(/\/$/, '')
 
 // 业务状态码

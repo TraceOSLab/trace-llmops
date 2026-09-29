@@ -11,6 +11,7 @@
 .npmrc
 .env.development
 .pnpm-store
+node_modules/
 
 # 构建产物
 dist/

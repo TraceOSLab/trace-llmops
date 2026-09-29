@@ -7,8 +7,8 @@ Youyou 的 AI 应用工作台。Vue 3 + TypeScript + Vite，浅色青绿主题�
 在仓库根目录运行：
 
 ```sh
-pnpm --dir llmops-web install --frozen-lockfile
-pnpm --dir llmops-web dev
+pnpm install --frozen-lockfile
+pnpm dev:web
 ```
 
 打开终端显示的本地地址（默认 `http://127.0.0.1:5173`）。需要现有 Flask 后端提供登录和业务 API；后端启动遵循仓库 `docs/runbooks/development.md`。
@@ -16,7 +16,7 @@ pnpm --dir llmops-web dev
 前端默认连接 `http://localhost:5000`，可通过环境变量指定：
 
 ```sh
-VITE_API_BASE_URL=http://localhost:5000 pnpm --dir llmops-web dev
+VITE_API_BASE_URL=http://localhost:5000 pnpm dev:web
 ```
 
 配置项见 `.env.example`。Vite 在构建时注入 API 地址；不要把 API 密钥或模型凭证放入 `VITE_*`。浏览器直连后端，后端须允许实际前端 origin 与认证请求头。没有修改现有后端 CORS 或鉴权配置。
@@ -24,22 +24,22 @@ VITE_API_BASE_URL=http://localhost:5000 pnpm --dir llmops-web dev
 ## 检查与构建
 
 ```sh
-pnpm --dir llmops-web type-check
-pnpm --dir llmops-web lint
-pnpm --dir llmops-web test
-pnpm --dir llmops-web build
-pnpm --dir llmops-web preview
+pnpm --filter trace-llmops-web type-check
+pnpm --filter trace-llmops-web lint
+pnpm --filter trace-llmops-web test
+pnpm --filter trace-llmops-web build
+pnpm --filter trace-llmops-web preview
 ```
 
 浏览器测试使用本地构建和模拟 API，不需要登录真实账号，不调用真实后端、付费模型或外部工具：
 
 ```sh
 # 已安装 Google Chrome 时
-PLAYWRIGHT_CHANNEL=chrome pnpm --dir llmops-web test:e2e
+PLAYWRIGHT_CHANNEL=chrome pnpm --filter trace-llmops-web test:e2e
 
 # 或一次性安装 Playwright Chromium，之后执行测试
-pnpm --dir llmops-web exec playwright install chromium
-pnpm --dir llmops-web test:e2e
+pnpm --filter trace-llmops-web exec playwright install chromium
+pnpm --filter trace-llmops-web test:e2e
 ```
 
 测试自身拦截所有非前端请求，API 请求由内存数据响应，其他域名直接阻断。浏览器启动需允许创建隔离用户目录。测试端口为 5179；截图与失败追踪保存在 `test-results/`，不提交。

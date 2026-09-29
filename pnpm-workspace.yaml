@@ -1,5 +1,6 @@
 packages:
-  - '.'
+  - llmops-web
+
 allowBuilds:
   esbuild: true
   vue-demi: true

@@ -2,43 +2,40 @@
 
 ## 当前开发方式
 
-项目最初在 PyCharm 中开发，后来迁移到 VS Code。当前后端日常启动方式以 `llmops-api/.vscode/launch.json` 为准：选择 `Development (Flask + Celery)` 后按 F5，同时启动 Flask API 和 Celery Worker。`uv` 仍然是 Python 依赖管理工具，并被 `tasks.json` 中的终端任务使用，但它不是唯一、也不是日常首选的 API 启动入口。
+从仓库根目录可以使用 pnpm 脚本启动前端和后端；需要 Python 断点时，使用根目录 `.vscode/launch.json` 中的 `Development (Flask + Celery)`。后端仍由 `uv` 管理 Python 依赖。
 
-需要注意，`.vscode` 位于 `llmops-api/` 内，而不是仓库根目录：
-
-- 推荐使用 VS Code 的 **File → Open Folder...**，直接打开 `llmops-api/`；
-- 或在多根 Workspace 中把 `llmops-api/` 添加为独立 Workspace Folder；
-- 如果只打开仓库根目录 `trace-llmops/`，VS Code 不会自动使用嵌套目录中的 `llmops-api/.vscode/launch.json` 和 `tasks.json`。
+用 VS Code 的 **File → Open Folder...** 打开仓库根目录。根目录 `.vscode/` 中的调试配置和 Task 均将后端工作目录设为 `llmops-api/`。
 
 ## 首次初始化
 
-项目根目录负责 Docker Compose，`llmops-api/` 负责 Python 环境：
+项目根目录负责 Docker Compose 和 pnpm workspace，`llmops-api/` 负责 Python 环境：
 
 ```bash
 cp .env.example .env
 cp llmops-api/.env.example llmops-api/.env
-docker compose -f compose.yaml -f compose.dev.yaml up -d
+docker compose -f compose.yaml -f compose.override.yaml up -d
+pnpm install --frozen-lockfile
 cd llmops-api
 uv sync --locked
 ```
 
 `.env.example` 只用于了解配置项。不要把真实密钥提交到仓库，也不要让 Codex 读取或输出 `.env`。项目通过 `.python-version` 选择 Python 3.11，并要求 uv 0.12.5 或更高版本。
 
-随后在 VS Code 中执行 **Python: Select Interpreter**，选择：
+随后打开仓库根目录。调试配置已指定下列解释器；VS Code 编辑 Python 文件时也可通过 **Python: Select Interpreter** 选择它：
 
 ```text
 llmops-api/.venv/bin/python
 ```
 
-在 macOS 上可以按 `⇧⌘P` 打开 Command Palette，搜索 `Python: Select Interpreter`。这一步很重要：F5 的 `launch.json` 通过 Python 扩展和 debugpy 启动 Flask，它使用的是 VS Code 当前选中的 Python Interpreter，而不是在配置中直接执行 `uv run`。
+在 macOS 上可以按 `⇧⌘P` 打开 Command Palette，搜索 `Python: Select Interpreter`。F5 通过 Python 扩展和 debugpy 启动 Flask，`launch.json` 明确指向后端 `.venv/bin/python`；命令行脚本则通过 `uv run` 使用同一个项目环境。
 
 如果 VS Code 没有 `Python: Select Interpreter` 或 F5 无法识别 `debugpy` 配置，接受工作区推荐并安装或启用 Microsoft Python 与 Python Debugger 扩展。
 
 ## 使用 F5 启动完整开发进程
 
-确保 VS Code 当前打开的是 `llmops-api/`，然后：
+确保 VS Code 当前打开的是仓库根目录，然后：
 
-1. 先从仓库根目录执行 `docker compose -f compose.yaml -f compose.dev.yaml up -d`，启动 PostgreSQL、Redis 和 Weaviate；
+1. 先从仓库根目录执行 `docker compose -f compose.yaml -f compose.override.yaml up -d`，启动 PostgreSQL、Redis 和 Weaviate；
 2. 确认状态栏选择的是 `.venv/bin/python`；
 3. 打开 **Run and Debug** 面板；
 4. 选择 `Development (Flask + Celery)`；
@@ -57,11 +54,11 @@ llmops-api/.venv/bin/python
 
 需要只调试一个进程时，选择 `Flask API` 或 `Celery Worker` 后按 F5 即可。
 
-F5 不会自动执行数据库迁移，也不会自动启动或停止 Docker Compose。迁移可能改变数据结构，Docker 基础设施通常跨多个调试会话复用，把它们绑定到每次 F5 会造成不必要的副作用。首次开发或基础设施未运行时，仍应先从仓库根目录执行 `docker compose -f compose.yaml -f compose.dev.yaml up -d`。
+F5 不会自动执行数据库迁移，也不会自动启动或停止 Docker Compose。迁移可能改变数据结构，Docker 基础设施通常跨多个调试会话复用，把它们绑定到每次 F5 会造成不必要的副作用。首次开发或基础设施未运行时，仍应先从仓库根目录执行 `docker compose -f compose.yaml -f compose.override.yaml up -d`。
 
 ## 使用 tasks.json 启动任务
 
-正确文件名是 `tasks.json`（复数），位置是 `llmops-api/.vscode/tasks.json`。它当前定义了四个 Task：
+正确文件名是 `tasks.json`（复数），位置是根目录 `.vscode/tasks.json`。它当前定义了四个 Task：
 
 | Task            | 作用                                                      | 日常启动是否需要                     |
 | --------------- | --------------------------------------------------------- | ------------------------------------ |
@@ -79,7 +76,7 @@ F5 不会自动执行数据库迁移，也不会自动启动或停止 Docker Com
 5. VS Code 会打开一个专用集成终端并持续运行 Worker，日志直接显示在终端；
 6. 需要停止时聚焦该终端，按 `Ctrl+C`，或点击终端的停止/垃圾桶按钮。
 
-也可以通过菜单 **Terminal → Run Task...** 选择相同任务。Task 会在 `${workspaceFolder}` 下运行，所以这里同样要求 `llmops-api/` 是当前 Workspace Folder。
+也可以通过菜单 **Terminal → Run Task...** 选择相同任务。Task 的工作目录明确设置为 `${workspaceFolder}/llmops-api`，其中 `${workspaceFolder}` 是仓库根目录。
 
 第一次初始化数据库时，可以用同样方式运行 `db upgrade`。该 Task 执行结束后终端会返回，不需要一直保持运行。
 
@@ -92,11 +89,13 @@ F5 不会自动执行数据库迁移，也不会自动启动或停止 Docker Com
 
 ## 推荐的日常启动顺序
 
-1. 从仓库根目录启动基础设施：`docker compose -f compose.yaml -f compose.dev.yaml up -d`；
-2. 在 VS Code 中直接打开 `llmops-api/`；
-3. 选择 `Development (Flask + Celery)` 并按 F5；
-4. 调试结束后按 `⇧F5`，Flask 和 Celery 会一起停止；
-5. 基础设施不再使用时运行 `docker compose -f compose.yaml -f compose.dev.yaml down`。
+1. 从仓库根目录启动基础设施：`docker compose -f compose.yaml -f compose.override.yaml up -d`；
+2. 需要终端启动时，在根目录执行 `pnpm dev`（前端 + Flask + Celery）、`pnpm dev:web`（仅前端）或 `pnpm dev:api`（Flask + Celery）；
+3. 需要后端断点时，在 VS Code 中打开仓库根目录，选择 `Development (Flask + Celery)` 并按 F5；前端可另开终端执行 `pnpm dev:web`；
+4. 终端命令按 Ctrl+C 一起停止其所管理的进程；F5 调试结束后按 `⇧F5` 停止 Flask 和 Celery；
+5. 基础设施不再使用时运行 `docker compose -f compose.yaml -f compose.override.yaml down`。
+
+`pnpm dev` 与 F5 是两套启动入口，不要同时启动相同的 Flask 端口或 Celery Worker。命令行 Flask 使用开发模式与自动重载；Celery 修改代码后需要重启命令。`pnpm dev` 和 `pnpm dev:api` 使用 `concurrently` 标注各进程日志；其中一个进程退出时其余进程也会停止。根目录 pnpm workspace 只管理前端和开发启动脚本；Python 依赖仍由 `llmops-api/uv.lock` 管理。
 
 ## 生产基础设施 Compose
 
@@ -115,7 +114,7 @@ docker compose -f compose.yaml -f compose.prod.yaml down
 
 ## 终端备用启动方式
 
-不使用 VS Code 调试器时，也可以在终端启动 API：
+不使用 VS Code 调试器时，推荐在仓库根目录执行 `pnpm dev:api`。单独启动 Flask 或 Celery 时，分别执行 `pnpm dev:flask` 和 `pnpm dev:worker`。以下是从 `llmops-api/` 直接运行的等价命令：
 
 ```bash
 cd llmops-api
@@ -134,7 +133,7 @@ uv run celery -A app.http.app:celery worker --loglevel=INFO --pool=solo
 停止基础设施但保留本地数据：
 
 ```bash
-docker compose -f compose.yaml -f compose.dev.yaml down
+docker compose -f compose.yaml -f compose.override.yaml down
 ```
 
 ## 当前测试方式
@@ -227,11 +226,11 @@ rg -n 'event: |text/event-stream|QueueEvent' llmops-api
 
 ## 常见问题
 
-- F5 看不到 `Development (Flask + Celery)`：通常是因为只打开了仓库根目录，或者 Python/debugpy 扩展未启用。请直接打开 `llmops-api/` 后重试。
-- **Tasks: Run Task** 中看不到 Celery/数据库任务：确认当前 Workspace Folder 是 `llmops-api/`，且 `.vscode/tasks.json` 未被 Workspace Trust 限制。
+- F5 看不到 `Development (Flask + Celery)`：确认打开的是仓库根目录，且 Python/debugpy 扩展已启用。
+- **Tasks: Run Task** 中看不到 Celery/数据库任务：确认打开的是仓库根目录，且 `.vscode/tasks.json` 未被 Workspace Trust 限制。
 - compound 中只出现 Flask、没有 Celery：在 Run and Debug 下拉框中确认选择的是 `Development (Flask + Celery)`，而不是 `Flask API`。
 - 修改代码后没有自动重载：调试配置有意关闭 Flask reloader；按 `⇧F5` 后再次按 F5，确保 Flask 和 Celery 使用同一版代码。
-- API 启动失败：确认位于 `llmops-api/`，依赖已通过 `uv sync --locked` 安装，且两个 `.env` 文件的本地配置一致。
+- API 启动失败：确认已在 `llmops-api/` 执行 `uv sync --locked`，且两个 `.env` 文件的本地配置一致；根目录脚本和 F5 会自动设置后端工作目录。
 - Celery 收不到任务：确认 Redis 可用、Worker 使用正确的 `-A app.http.app:celery`，并在代码变化后重启 Worker。
 - 文档索引失败：依次检查 PostgreSQL 中的文档状态、Celery 日志和 Weaviate 连通性。
 - 单 Worker 可流式输出，多 Worker 异常：当前 Agent Queue 是进程内 Queue，不支持跨 API Worker 共享。
