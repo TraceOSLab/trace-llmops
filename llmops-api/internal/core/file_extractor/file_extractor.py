@@ -70,7 +70,7 @@ class FileExtractor:
 
             return cls.load_from_file(file_path, return_text)
 
-    @classmethod
+    @classmethod 
     def load_from_file(
             cls,
             file_path: str,

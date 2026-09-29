@@ -10,6 +10,7 @@
 .cache
 .npmrc
 .env.development
+.pnpm-store
 
 # 构建产物
 dist/
@@ -27,3 +28,5 @@ __pycache__/
 
 # 文档
 docs/
+
+llmops-web-demo/

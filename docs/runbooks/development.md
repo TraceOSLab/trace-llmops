@@ -17,7 +17,7 @@
 ```bash
 cp .env.example .env
 cp llmops-api/.env.example llmops-api/.env
-docker compose up -d
+docker compose -f compose.yaml -f compose.dev.yaml up -d
 cd llmops-api
 uv sync --locked
 ```
@@ -38,7 +38,7 @@ llmops-api/.venv/bin/python
 
 确保 VS Code 当前打开的是 `llmops-api/`，然后：
 
-1. 先从仓库根目录执行 `docker compose up -d`，启动 PostgreSQL、Redis 和 Weaviate；
+1. 先从仓库根目录执行 `docker compose -f compose.yaml -f compose.dev.yaml up -d`，启动 PostgreSQL、Redis 和 Weaviate；
 2. 确认状态栏选择的是 `.venv/bin/python`；
 3. 打开 **Run and Debug** 面板；
 4. 选择 `Development (Flask + Celery)`；
@@ -57,7 +57,7 @@ llmops-api/.venv/bin/python
 
 需要只调试一个进程时，选择 `Flask API` 或 `Celery Worker` 后按 F5 即可。
 
-F5 不会自动执行数据库迁移，也不会自动启动或停止 Docker Compose。迁移可能改变数据结构，Docker 基础设施通常跨多个调试会话复用，把它们绑定到每次 F5 会造成不必要的副作用。首次开发或基础设施未运行时，仍应先从仓库根目录执行 `docker compose up -d`。
+F5 不会自动执行数据库迁移，也不会自动启动或停止 Docker Compose。迁移可能改变数据结构，Docker 基础设施通常跨多个调试会话复用，把它们绑定到每次 F5 会造成不必要的副作用。首次开发或基础设施未运行时，仍应先从仓库根目录执行 `docker compose -f compose.yaml -f compose.dev.yaml up -d`。
 
 ## 使用 tasks.json 启动任务
 
@@ -92,11 +92,24 @@ F5 不会自动执行数据库迁移，也不会自动启动或停止 Docker Com
 
 ## 推荐的日常启动顺序
 
-1. 从仓库根目录启动基础设施：`docker compose up -d`；
+1. 从仓库根目录启动基础设施：`docker compose -f compose.yaml -f compose.dev.yaml up -d`；
 2. 在 VS Code 中直接打开 `llmops-api/`；
 3. 选择 `Development (Flask + Celery)` 并按 F5；
 4. 调试结束后按 `⇧F5`，Flask 和 Celery 会一起停止；
-5. 基础设施不再使用时运行 `docker compose down`。
+5. 基础设施不再使用时运行 `docker compose -f compose.yaml -f compose.dev.yaml down`。
+
+## 生产基础设施 Compose
+
+根目录的 `compose.prod.yaml` 仅定义 PostgreSQL、Redis 和 Weaviate 基础设施，不包含 API 或 Celery Worker 镜像。它适用于应用进程运行在同一台主机、通过 `localhost` 连接这些服务的部署方式；它不是完整的应用生产部署方案。
+
+生产主机应使用独立的 `.env`，至少设置强随机 `POSTGRES_PASSWORD` 和绝对路径 `DOCKER_DATA_DIR`（例如 `/var/lib/trace-llmops`）。不要将 `.env.example` 的示例密码用于生产，也不要提交 `.env`。启动和停止：
+
+```bash
+docker compose -f compose.yaml -f compose.prod.yaml up -d
+docker compose -f compose.yaml -f compose.prod.yaml down
+```
+
+生产覆盖层只将服务端口绑定到本机回环地址，且需要确保 `DOCKER_DATA_DIR` 位于有备份、空间充足的持久化磁盘上。若 API/Worker 将部署在其他容器、主机或托管平台，应先确定网络、认证和数据服务托管方式，再调整配置。
 
 如果当前功能不涉及文档索引或其他异步任务，可以改选 `Flask API` 单独启动；Flask 本身不依赖 Worker 进程一直在线。
 
@@ -121,7 +134,7 @@ uv run celery -A app.http.app:celery worker --loglevel=INFO --pool=solo
 停止基础设施但保留本地数据：
 
 ```bash
-docker compose down
+docker compose -f compose.yaml -f compose.dev.yaml down
 ```
 
 ## 当前测试方式

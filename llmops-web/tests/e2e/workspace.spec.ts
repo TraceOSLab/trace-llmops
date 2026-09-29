@@ -1,0 +1,82 @@
+import { test, expect } from '@playwright/test'
+import { mock, appId, workflowId } from './fixtures'
+test('dashboard, API key masking, assistant stream and published chat', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await mock(page)
+  await page.goto('/home')
+  await expect(page.getByRole('heading', { name: '从想法，到可用的 AI 应用。' })).toBeVisible()
+  await expect(page.getByText('产品知识助手')).toBeVisible()
+  await page.screenshot({ path: 'test-results/dashboard-1440.png', fullPage: true })
+  await page.goto('/openapi/api-keys')
+  await expect(page.getByText('test-secret-do-not-show', { exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: '查看', exact: true }).click()
+  await expect(page.getByText('test-secret-do-not-show', { exact: true })).toBeVisible()
+  await page.goto('/assistant')
+  await page.getByRole('textbox', { name: '输入消息' }).fill('你好')
+  await page.getByRole('textbox', { name: '输入消息' }).press('Enter')
+  await expect(page.getByText('这是本地模拟的回答。', { exact: true })).toBeVisible()
+  await expect(page.getByText('统计不完整 · 费用未知 · 按价目表计算')).toBeVisible()
+  await expect(page.getByRole('button', { name: '停止', exact: true })).toHaveCount(0)
+  await page.goto('/web-apps/local-test')
+  await expect(page.getByRole('heading', { name: '产品知识助手' })).toBeVisible()
+  expect(errors).toEqual([])
+})
+test('application editor loads, persists prompt and publishes', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  const calls = await mock(page)
+  await page.goto(`/space/apps/${appId}`)
+  await expect(page.getByRole('heading', { name: '角色与任务' })).toBeVisible()
+  await page.screenshot({ path: 'test-results/app-editor.png', fullPage: true })
+  const prompt = page.locator('textarea').first()
+  await prompt.fill('新的提示词')
+  await prompt.blur()
+  await expect
+    .poll(() =>
+      calls.some(
+        (c) => c.path.endsWith('/draft-app-config') && c.body?.preset_prompt === '新的提示词',
+      ),
+    )
+    .toBe(true)
+  await page.reload()
+  await expect(page.locator('textarea').first()).toHaveValue('新的提示词')
+  await page.getByRole('button', { name: '更新发布', exact: true }).click()
+  await expect.poll(() => calls.some((c) => c.path.endsWith('/publish'))).toBe(true)
+  await page.getByRole('link', { name: '发布', exact: true }).click()
+  await expect(page.getByRole('button', { name: '复制链接' })).toBeVisible()
+  await page.screenshot({ path: 'test-results/published.png', fullPage: true })
+  expect(errors).toEqual([])
+})
+test('workflow renders and debug output uses real result', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await mock(page)
+  await page.goto(`/space/workflows/${workflowId}`)
+  await expect(page.getByText('内容处理流程', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '调试', exact: true }).click()
+  await expect(page.getByText('工作流调试', { exact: true })).toBeVisible()
+  await page.screenshot({ path: 'test-results/workflow.png', fullPage: true })
+  expect(errors).toEqual([])
+})
+for (const width of [1440, 1024, 390])
+  test(`responsive shell ${width}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await mock(page)
+    await page.goto('/home')
+    await expect(page.getByRole('heading', { name: '从想法，到可用的 AI 应用。' })).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.screenshot({ path: `test-results/home-${width}.png`, fullPage: true })
+    await page.goto('/space/apps')
+    await expect(page.getByText('产品知识助手', { exact: true })).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  })
+test('login preserves share return target', async ({ page }) => {
+  await mock(page, false)
+  await page.goto('/web-apps/local-test')
+  await expect(page).toHaveURL(/auth\/login\?redirect=/)
+  await page.getByPlaceholder('登录账号').fill('youyou@example.test')
+  await page.getByPlaceholder('账号密码').fill('test-only-password')
+  await page.getByRole('button', { name: '登录', exact: true }).click()
+  await expect(page).toHaveURL(/web-apps\/local-test$/)
+})

@@ -20,7 +20,7 @@ uv sync --locked
 ```bash
 cd ..
 cp .env.example .env
-docker compose up -d
+docker compose -f compose.yaml -f compose.dev.yaml up -d
 ```
 
 随后在 VS Code 的 **Run and Debug** 中选择 `Development (Flask + Celery)` 并按 F5。该复合配置会同时启动可调试的 Flask API 和 Celery Worker；按 `⇧F5` 会一起停止二者。
