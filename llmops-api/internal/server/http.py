@@ -17,6 +17,7 @@ from internal.exception import CustomException
 from internal.extension import celery_extension
 from internal.extension import logging_extension
 from internal.extension import redis_extension
+from internal.extension.weaviate_extension import weaviate
 from internal.middleware import Middleware
 from internal.router import Router
 from pkg.response import json, Response, fail_message
@@ -52,6 +53,7 @@ class Http(Flask):
         redis_extension.init_app(self)
         celery_extension.init_app(self)
         logging_extension.init_app(self)
+        weaviate.init_app(self)
 
         # 注册中间件
         login_manager.request_loader(middleware.request_loader)

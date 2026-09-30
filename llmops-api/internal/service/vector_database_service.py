@@ -6,10 +6,10 @@
 @Author :   s.qiu@foxmail.com
 """
 
-import logging
-import os
 from threading import RLock
 
+from flask import g
+from flask_weaviate import FlaskWeaviate
 from injector import inject
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStoreRetriever
@@ -28,50 +28,30 @@ class VectorDatabaseService:
 
     embeddings_service: EmbeddingsService
 
-    def __init__(self, embeddings_service: EmbeddingsService):
+    def __init__(self, embeddings_service: EmbeddingsService, weaviate: FlaskWeaviate):
         self.embeddings_service = embeddings_service
-        self._client: WeaviateClient | None = None
-        self._vector_store: WeaviateVectorStore | None = None
+        self.weaviate = weaviate
         self._lock = RLock()
 
     @property
     def client(self) -> WeaviateClient:
-        with self._lock:
-            if self._client is None:
-                import weaviate
-
-                self._client = weaviate.connect_to_local(
-                    host=os.getenv("WEAVIATE_HTTP_HOST"),
-                    grpc_port=os.getenv("WEAVIATE_GRPC_PORT"),
-                )
-            return self._client
+        return self.weaviate.client
 
     @property
     def vector_store(self) -> WeaviateVectorStore:
+        # Service 可被多个索引线程共用；缓存必须和扩展客户端一样属于当前上下文。
+        # 保留锁，避免同一索引任务的多个线程同时首次创建 Dataset 集合。
         with self._lock:
-            if self._vector_store is None:
-                self._vector_store = WeaviateVectorStore(
+            vector_store = g.get("weaviate_vector_store")
+            if vector_store is None:
+                vector_store = WeaviateVectorStore(
                     client=self.client,
                     index_name=COLLECTION_NAME,
                     text_key="text",
                     embedding=self.embeddings_service.embeddings,
                 )
-            return self._vector_store
-
-    def close(self) -> None:
-        """关闭当前服务实例持有的 Weaviate 连接。"""
-        with self._lock:
-            client = self._client
-            self._vector_store = None
-            self._client = None
-
-            if client is None:
-                return
-
-            try:
-                client.close()
-            except Exception:
-                logging.exception("关闭 Weaviate 连接失败")
+                g.weaviate_vector_store = vector_store
+            return vector_store
 
     def get_retriever(self) -> VectorStoreRetriever:
         """获取检索器"""

@@ -7,12 +7,14 @@
 """
 
 from flask_migrate import Migrate
+from flask_weaviate import FlaskWeaviate
 from injector import Module, Binder, Injector
 from redis import Redis
 
 from internal.extension.database_extension import db
 from internal.extension.migrate_extension import migrate
 from internal.extension.redis_extension import redis_client
+from internal.extension.weaviate_extension import weaviate
 from pkg.sqlalchemy import SQLAlchemy
 
 
@@ -23,6 +25,7 @@ class ExtensionModule(Module):
         binder.bind(SQLAlchemy, to=db)
         binder.bind(Migrate, to=migrate)
         binder.bind(Redis, to=redis_client)
+        binder.bind(FlaskWeaviate, to=weaviate)
 
 
 injector = Injector([ExtensionModule])

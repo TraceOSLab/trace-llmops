@@ -26,7 +26,7 @@ DEFAULT_CONFIG = {
     "WEAVIATE_HTTP_PORT": 8080,
     "WEAVIATE_GRPC_HOST": "localhost",
     "WEAVIATE_GRPC_PORT": 50051,
-    "WEAVIATE_API_KEY": " ",
+    "WEAVIATE_API_KEY": "",
     # Celery默认配置
     "CELERY_BROKER_DB": 1,
     "CELERY_RESULT_BACKEND_DB": 1,

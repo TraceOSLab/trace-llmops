@@ -18,10 +18,7 @@ def build_documents(document_ids: list[str]) -> None:
     from internal.service import IndexingService
 
     indexing_service = injector.get(IndexingService)
-    try:
-        indexing_service.build_documents([UUID(document_id) for document_id in document_ids])
-    finally:
-        indexing_service.vector_database_service.close()
+    indexing_service.build_documents([UUID(document_id) for document_id in document_ids])
 
 
 @shared_task
@@ -31,10 +28,7 @@ def update_document_enabled(document_id: str) -> None:
     from internal.service.indexing_service import IndexingService
 
     indexing_service = injector.get(IndexingService)
-    try:
-        indexing_service.update_document_enabled(UUID(document_id))
-    finally:
-        indexing_service.vector_database_service.close()
+    indexing_service.update_document_enabled(UUID(document_id))
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=1)
@@ -56,5 +50,3 @@ def delete_document(self, dataset_id: str, document_id: str) -> None:
     except Exception as exc:
         # 向量库暂不可用时，删除是幂等的，可以由 Celery 有限重试完成清理。
         raise self.retry(exc=exc) from exc
-    finally:
-        indexing_service.vector_database_service.close()

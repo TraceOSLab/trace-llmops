@@ -48,6 +48,14 @@ flowchart LR
 
 文档新增、更新、删除 Service 通过 Celery 调用索引任务。Worker 进入 Flask Application Context 后调用索引 Service。Celery 的序列化、幂等、重试和重复投递仍需要在后续相关改动中逐项验证，不应假设已经完善。
 
+## Weaviate 连接管理
+
+`Config` 读取 `WEAVIATE_HTTP_HOST/PORT`、`WEAVIATE_GRPC_HOST/PORT` 和 `WEAVIATE_API_KEY`，端口转换为整数，空 API Key 转换为 `None`（匿名连接）。`Http` 在加载配置后初始化 `internal/extension/weaviate_extension.py` 中的 `FlaskWeaviate`；`app/http/module.py` 将该扩展实例绑定到 Injector。
+
+`VectorDatabaseService` 注入扩展，通过 `.client` 获取当前 Flask Application Context 的客户端；`WeaviateVectorStore` 同样缓存在该上下文的 `g` 中。两者均为首次使用时创建，应用启动不会连接 Weaviate 或加载 Embedding 模型。上下文退出后由扩展关闭客户端，Service 和 Celery 文档任务不再手动关闭它。
+
+HTTP 请求、Celery 任务、索引工作线程和 Agent 检索工具各自在已有的应用上下文中使用连接。不同上下文使用独立客户端；不得将客户端、Collection 或 VectorStore 保存到长期存活的 Service 字段或带到另一个上下文使用。数据库中的集合仍为 `Dataset`，片段 ID、元数据和检索过滤规则保持现有契约。
+
 ## 配置与密钥
 
 配置由 Flask Factory 从环境变量加载。只有 `.env.example` 可作为配置项参考；Codex 不应读取或输出 `.env`。当前尚未建立 CI，测试会继承本地配置，因此运行测试前要确认不会连接生产资源或调用付费模型。
