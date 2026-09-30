@@ -16,7 +16,7 @@ node_modules/
 # 构建产物
 dist/
 build/
-docker/
+docker/data
 
 # python
 tmp/*

@@ -99,16 +99,16 @@ F5 不会自动执行数据库迁移，也不会自动启动或停止 Docker Com
 
 ## 生产基础设施 Compose
 
-根目录的 `compose.prod.yaml` 是独立配置，只定义 PostgreSQL、Redis 和 Weaviate 基础设施，不包含 API 或 Celery Worker 镜像。容器端口没有发布到宿主机；若应用进程运行在 Compose 网络之外，需要另行规划安全的网络连接方式。它不是完整的应用生产部署方案。
+根目录的 `compose.prod.yaml` 是独立配置，包含前端静态站点和 PostgreSQL、Redis、Weaviate 基础设施，不包含 API 或 Celery Worker 镜像。前端通过 `${WEB_PORT:-5173}` 发布到宿主机；数据库、缓存和向量服务不发布端口。若 API/Worker 运行在 Compose 网络之外，需要另行规划安全的网络连接方式。它不是完整的应用生产部署方案。
 
-生产主机应使用独立的 `.env`，至少设置强随机 `POSTGRES_PASSWORD`、`REDIS_PASSWORD` 和 `WEAVIATE_API_KEY`。不要将 `.env.example` 的示例密码用于生产，也不要提交 `.env`。数据由 Docker 命名卷持久化。启动和停止：
+生产主机应使用独立的 `.env`，至少设置强随机 `POSTGRES_PASSWORD`、`REDIS_PASSWORD` 和 `WEAVIATE_API_KEY`。还需设置 `WEB_API_BASE_URL` 为访客浏览器可访问的 API 地址；它会在 Vite 构建时写入前端文件，修改后须重新构建镜像。`WEB_PORT` 可调整前端宿主机端口。不要将 `.env.example` 的示例密码用于生产，也不要提交 `.env`。数据由 Docker 命名卷持久化。启动和停止：
 
 ```bash
-docker compose -f compose.prod.yaml up -d
+docker compose -f compose.prod.yaml up -d --build
 docker compose -f compose.prod.yaml down
 ```
 
-生产配置不发布服务端口，且通过 Docker 命名卷保存数据。应为 Docker 数据目录安排备份并确保磁盘空间充足。若 API/Worker 将部署在其他容器、主机或托管平台，应先确定网络、认证和数据服务托管方式，再调整配置。
+前端 Nginx 支持 Vue Router 路由回退，浏览器直接请求 API；部署时需确认 API 的 HTTPS、CORS 和鉴权配置与前端地址匹配。基础设施通过 Docker 命名卷保存数据，应安排备份并确保磁盘空间充足。若 API/Worker 将部署在其他容器、主机或托管平台，应先确定网络、认证和数据服务托管方式，再调整配置。
 
 如果当前功能不涉及文档索引或其他异步任务，可以改选 `Flask API` 单独启动；Flask 本身不依赖 Worker 进程一直在线。
 

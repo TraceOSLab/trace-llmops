@@ -2,9 +2,10 @@
 # -*- encoding: utf-8 -*-
 """
 @File   :   vector_database_service
-@Time   :   2025/12/19 
+@Time   :   2025/12/19
 @Author :   s.qiu@foxmail.com
 """
+
 import logging
 import os
 from threading import RLock
@@ -24,6 +25,7 @@ COLLECTION_NAME = "Dataset"
 @inject
 class VectorDatabaseService:
     """向量数据库服务"""
+
     embeddings_service: EmbeddingsService
 
     def __init__(self, embeddings_service: EmbeddingsService):
@@ -39,8 +41,8 @@ class VectorDatabaseService:
                 import weaviate
 
                 self._client = weaviate.connect_to_local(
-                    host=os.getenv("WEAVIATE_HOST"),
-                    grpc_port=os.getenv("WEAVIATE_PORT"),
+                    host=os.getenv("WEAVIATE_HTTP_HOST"),
+                    grpc_port=os.getenv("WEAVIATE_GRPC_PORT"),
                 )
             return self._client
 

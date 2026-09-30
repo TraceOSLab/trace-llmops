@@ -19,29 +19,34 @@ def main() -> None:
     args = parser.parse_args()
 
     # Preserve only OS/runtime locations, never inherited service credentials.
-    runtime = {key: os.environ[key] for key in ("PATH", "HOME", "TMPDIR", "SYSTEMROOT")
-               if key in os.environ}
+    runtime = {
+        key: os.environ[key]
+        for key in ("PATH", "HOME", "TMPDIR", "SYSTEMROOT")
+        if key in os.environ
+    }
     os.environ.clear()
     os.environ.update(runtime)
     database_url = "postgresql://llmops_test:llmops_test@127.0.0.1:55432/llmops_test?client_encoding=utf8"
-    os.environ.update({
-        "PYTHON_DOTENV_DISABLED": "1",
-        "FLASK_SKIP_DOTENV": "1",
-        "RUN_LLM_SMOKE_TESTS": "false",
-        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
-        "TEST_DATABASE_URL": database_url,
-        "SQLALCHEMY_DATABASE_URI": database_url,
-        "JWT_SECRET_KEY": "integration-test-secret-key-32-bytes",
-        "WTF_CSRF_ENABLED": "False",
-        "SQLALCHEMY_ECHO": "False",
-        "REDIS_HOST": "127.0.0.1",
-        "REDIS_PORT": "1",
-        "WEAVIATE_HOST": "127.0.0.1",
-        "WEAVIATE_PORT": "1",
-        "LANGSMITH_TRACING": "false",
-        "TRANSFORMERS_OFFLINE": "1",
-        "HF_HUB_OFFLINE": "1",
-    })
+    os.environ.update(
+        {
+            "PYTHON_DOTENV_DISABLED": "1",
+            "FLASK_SKIP_DOTENV": "1",
+            "RUN_LLM_SMOKE_TESTS": "false",
+            "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+            "TEST_DATABASE_URL": database_url,
+            "SQLALCHEMY_DATABASE_URI": database_url,
+            "JWT_SECRET_KEY": "integration-test-secret-key-32-bytes",
+            "WTF_CSRF_ENABLED": "False",
+            "SQLALCHEMY_ECHO": "False",
+            "REDIS_HOST": "127.0.0.1",
+            "REDIS_PORT": "1",
+            "WEAVIATE_HTTP_HOST": "127.0.0.1",
+            "WEAVIATE_HTTP_PORT": "1",
+            "LANGSMITH_TRACING": "false",
+            "TRANSFORMERS_OFFLINE": "1",
+            "HF_HUB_OFFLINE": "1",
+        }
+    )
 
     # Block Python socket network access, including non-requests HTTP clients.
     # psycopg2 uses native libpq instead; constrain its DSN separately below.
@@ -52,6 +57,7 @@ def main() -> None:
     sys.addaudithook(audit)
 
     import dotenv
+
     dotenv.load_dotenv = lambda *a, **kw: False
     dotenv.dotenv_values = lambda *a, **kw: {}
 
@@ -82,10 +88,12 @@ def main() -> None:
 
     if args.mode == "migrate":
         from flask.cli import main as flask_main
+
         sys.argv = ["flask", "--app", "app.http.app:create_app", "db", "upgrade"]
         flask_main()
     else:
         import pytest
+
         target = "test/internal" if args.mode == "unit" else "test/integration"
         plugins = []
         if args.mode == "integration":
@@ -103,15 +111,20 @@ def main() -> None:
 
                 def record(self, sender, **extra):
                     if request.endpoint:
-                        visited.setdefault(request.endpoint, set()).add(self.current_test)
+                        visited.setdefault(request.endpoint, set()).add(
+                            self.current_test
+                        )
 
                 def pytest_sessionfinish(self, session, exitstatus):
                     routes = [
-                        {"path": rule.rule,
-                         "methods": sorted(rule.methods - {"HEAD", "OPTIONS"}),
-                         "endpoint": rule.endpoint,
-                         "tests": sorted(visited.get(rule.endpoint, set()))}
-                        for rule in app.url_map.iter_rules() if rule.endpoint != "static"
+                        {
+                            "path": rule.rule,
+                            "methods": sorted(rule.methods - {"HEAD", "OPTIONS"}),
+                            "endpoint": rule.endpoint,
+                            "tests": sorted(visited.get(rule.endpoint, set())),
+                        }
+                        for rule in app.url_map.iter_rules()
+                        if rule.endpoint != "static"
                     ]
                     (evidence / "routes.json").write_text(
                         json.dumps(routes, ensure_ascii=False, indent=2) + "\n"
@@ -120,10 +133,19 @@ def main() -> None:
             recorder = RouteEvidence()
             request_started.connect(recorder.record, app, weak=False)
             plugins.append(recorder)
-        raise SystemExit(pytest.main([
-            target, "-o", "addopts=", "-q", "-ra",
-            f"--junitxml={evidence / (args.mode + '.xml')}",
-        ], plugins=plugins))
+        raise SystemExit(
+            pytest.main(
+                [
+                    target,
+                    "-o",
+                    "addopts=",
+                    "-q",
+                    "-ra",
+                    f"--junitxml={evidence / (args.mode + '.xml')}",
+                ],
+                plugins=plugins,
+            )
+        )
 
 
 if __name__ == "__main__":
