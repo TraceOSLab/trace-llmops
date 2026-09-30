@@ -13,7 +13,7 @@
 ```bash
 cp .env.example .env
 cp llmops-api/.env.example llmops-api/.env
-docker compose -f compose.yaml -f compose.override.yaml up -d
+docker compose -f compose.dev.yaml up -d
 pnpm install --frozen-lockfile
 cd llmops-api
 uv sync --locked
@@ -35,7 +35,7 @@ llmops-api/.venv/bin/python
 
 确保 VS Code 当前打开的是仓库根目录，然后：
 
-1. 先从仓库根目录执行 `docker compose -f compose.yaml -f compose.override.yaml up -d`，启动 PostgreSQL、Redis 和 Weaviate；
+1. 先从仓库根目录执行 `docker compose -f compose.dev.yaml up -d`，启动 PostgreSQL、Redis 和 Weaviate；
 2. 确认状态栏选择的是 `.venv/bin/python`；
 3. 打开 **Run and Debug** 面板；
 4. 选择 `Development (Flask + Celery)`；
@@ -89,26 +89,26 @@ F5 不会自动执行数据库迁移，也不会自动启动或停止 Docker Com
 
 ## 推荐的日常启动顺序
 
-1. 从仓库根目录启动基础设施：`docker compose -f compose.yaml -f compose.override.yaml up -d`；
+1. 从仓库根目录启动基础设施：`docker compose -f compose.dev.yaml up -d`；
 2. 需要终端启动时，在根目录执行 `pnpm dev`（前端 + Flask + Celery）、`pnpm dev:web`（仅前端）或 `pnpm dev:api`（Flask + Celery）；
 3. 需要后端断点时，在 VS Code 中打开仓库根目录，选择 `Development (Flask + Celery)` 并按 F5；前端可另开终端执行 `pnpm dev:web`；
 4. 终端命令按 Ctrl+C 一起停止其所管理的进程；F5 调试结束后按 `⇧F5` 停止 Flask 和 Celery；
-5. 基础设施不再使用时运行 `docker compose -f compose.yaml -f compose.override.yaml down`。
+5. 基础设施不再使用时运行 `docker compose -f compose.dev.yaml down`。
 
 `pnpm dev` 与 F5 是两套启动入口，不要同时启动相同的 Flask 端口或 Celery Worker。命令行 Flask 使用开发模式与自动重载；Celery 修改代码后需要重启命令。`pnpm dev` 和 `pnpm dev:api` 使用 `concurrently` 标注各进程日志；其中一个进程退出时其余进程也会停止。根目录 pnpm workspace 只管理前端和开发启动脚本；Python 依赖仍由 `llmops-api/uv.lock` 管理。
 
 ## 生产基础设施 Compose
 
-根目录的 `compose.prod.yaml` 仅定义 PostgreSQL、Redis 和 Weaviate 基础设施，不包含 API 或 Celery Worker 镜像。它适用于应用进程运行在同一台主机、通过 `localhost` 连接这些服务的部署方式；它不是完整的应用生产部署方案。
+根目录的 `compose.prod.yaml` 是独立配置，只定义 PostgreSQL、Redis 和 Weaviate 基础设施，不包含 API 或 Celery Worker 镜像。容器端口没有发布到宿主机；若应用进程运行在 Compose 网络之外，需要另行规划安全的网络连接方式。它不是完整的应用生产部署方案。
 
-生产主机应使用独立的 `.env`，至少设置强随机 `POSTGRES_PASSWORD` 和绝对路径 `DOCKER_DATA_DIR`（例如 `/var/lib/trace-llmops`）。不要将 `.env.example` 的示例密码用于生产，也不要提交 `.env`。启动和停止：
+生产主机应使用独立的 `.env`，至少设置强随机 `POSTGRES_PASSWORD`、`REDIS_PASSWORD` 和 `WEAVIATE_API_KEY`。不要将 `.env.example` 的示例密码用于生产，也不要提交 `.env`。数据由 Docker 命名卷持久化。启动和停止：
 
 ```bash
-docker compose -f compose.yaml -f compose.prod.yaml up -d
-docker compose -f compose.yaml -f compose.prod.yaml down
+docker compose -f compose.prod.yaml up -d
+docker compose -f compose.prod.yaml down
 ```
 
-生产覆盖层只将服务端口绑定到本机回环地址，且需要确保 `DOCKER_DATA_DIR` 位于有备份、空间充足的持久化磁盘上。若 API/Worker 将部署在其他容器、主机或托管平台，应先确定网络、认证和数据服务托管方式，再调整配置。
+生产配置不发布服务端口，且通过 Docker 命名卷保存数据。应为 Docker 数据目录安排备份并确保磁盘空间充足。若 API/Worker 将部署在其他容器、主机或托管平台，应先确定网络、认证和数据服务托管方式，再调整配置。
 
 如果当前功能不涉及文档索引或其他异步任务，可以改选 `Flask API` 单独启动；Flask 本身不依赖 Worker 进程一直在线。
 
@@ -130,10 +130,10 @@ uv run celery -A app.http.app:celery worker --loglevel=INFO --pool=solo
 
 终端命令和 `.vscode` 配置是同一套应用入口的两种使用方式。文档中的 `uv run` 主要用于环境初始化、数据库命令、Celery Task 和无 IDE 场景。
 
-停止基础设施但保留本地数据：
+停止开发基础设施但保留本地数据：
 
 ```bash
-docker compose -f compose.yaml -f compose.override.yaml down
+docker compose -f compose.dev.yaml down
 ```
 
 ## 当前测试方式
