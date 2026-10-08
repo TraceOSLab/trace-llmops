@@ -18,13 +18,13 @@ from internal.server import Http
 from pkg.sqlalchemy import SQLAlchemy
 from .module import injector
 
-if os.environ.get("FLASK_DEBUG") == "0" or os.environ.get("FLASK_ENV") == "production":
-    from gevent import monkey
+# if os.environ.get("FLASK_DEBUG") == "0" or os.environ.get("FLASK_ENV") == "production":
+#     from gevent import monkey
 
-    monkey.patch_all()
-    import grpc.experimental.gevent
+#     monkey.patch_all()
+#     import grpc.experimental.gevent
 
-    grpc.experimental.gevent.init_gevent()
+#     grpc.experimental.gevent.init_gevent()
 
 # 加载ENV到环境变量
 dotenv.load_dotenv()
