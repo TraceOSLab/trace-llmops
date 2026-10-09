@@ -25,8 +25,8 @@ services:
     ports:
       - '5001:5001'
     volumes:
-      - api_storage:/app/storage
-      - embeddings_cache:/app/internal/core/embeddings
+      - ./volumes/app/storage:/app/storage
+      - ./volumes/app/embeddings:/app/internal/core/embeddings
     depends_on:
       postgres:
         condition: service_healthy
@@ -47,8 +47,8 @@ services:
       - ./llmops-api/.env
       - ./llmops-api/.env.celery
     volumes:
-      - api_storage:/app/storage
-      - embeddings_cache:/app/internal/core/embeddings
+      - ./volumes/app/storage:/app/storage
+      - ./volumes/app/embeddings:/app/internal/core/embeddings
     depends_on:
       postgres:
         condition: service_healthy
