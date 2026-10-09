@@ -6,7 +6,11 @@ WORKDIR /app
 ENV UV_LINK_MODE=copy \
   UV_PYTHON_DOWNLOADS=never \
   UV_COMPILE_BYTECODE=1
-RUN apt-get update \
+# 使用国内 Debian 镜像源加速系统依赖下载。
+RUN sed -i \
+  's|http://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' \
+  /etc/apt/sources.list.d/debian.sources \
+  && apt-get update \
   && apt-get install -y --no-install-recommends build-essential \
   && rm -rf /var/lib/apt/lists/*
 COPY llmops-api/pyproject.toml llmops-api/uv.lock ./
@@ -20,7 +24,10 @@ ENV PATH="/app/.venv/bin:$PATH" \
   HF_HOME=/app/storage/huggingface \
   TIKTOKEN_CACHE_DIR=/app/storage/tiktoken
 # 文档解析依赖：libmagic、PDF、OCR、Office；模型缓存另外准备。
-RUN apt-get update \
+RUN sed -i \
+  's|http://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' \
+  /etc/apt/sources.list.d/debian.sources \
+  && apt-get update \
   && apt-get install -y --no-install-recommends \
   ca-certificates libmagic1 libglib2.0-0 libgl1 libgomp1 \
   poppler-utils tesseract-ocr tesseract-ocr-chi-sim libreoffice \

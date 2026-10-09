@@ -13,6 +13,9 @@
 .cache
 .npmrc
 .env.development
+# SSL certificates and private keys stay on the deployment host.
+/nginx/ssl/*
+!/nginx/ssl/README.md
 .pnpm-store
 node_modules/
 

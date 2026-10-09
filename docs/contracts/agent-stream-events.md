@@ -4,7 +4,7 @@
 
 ## 传输格式
 
-流式接口返回 UTF-8 编码的 Server-Sent Events，`Content-Type` 为 `text/event-stream`。当前 Agent Stream 的实际格式类似：
+流式接口返回 UTF-8 编码的 Server-Sent Events，`Content-Type` 为 `text/event-stream`。生产环境浏览器通过入口 Nginx 的 `/api/` 访问流式接口；该代理关闭响应缓冲与压缩，读取空闲超时为 600 秒，后端事件格式与终止语义不受代理路径影响。当前 Agent Stream 的实际格式类似：
 
 ```text
 event: agent_message

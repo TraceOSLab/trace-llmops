@@ -1,17 +1,31 @@
 services:
+  llmops-nginx:
+    image: nginx:stable-alpine
+    container_name: ${PROJECT_NAME}-nginx
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/proxy.conf:/etc/nginx/proxy.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - llmops-web
+      - llmops-api
+
   llmops-web:
     image: ${PROJECT_NAME}-web:0.1.0
     build:
       context: .
       dockerfile: llmops-web/Dockerfile
       args:
-        WEB_API_BASE_URL: ${WEB_API_BASE_URL:?Set WEB_API_BASE_URL to an API URL reachable from visitors' browsers}
+        WEB_API_BASE_URL: /api
     container_name: ${PROJECT_NAME}-web
     restart: unless-stopped
-    ports:
-      - '5173:80'
-    depends_on:
-      - llmops-api
+    expose:
+      - '3000'
 
   llmops-api:
     image: ${PROJECT_NAME}-api:0.1.0
@@ -22,8 +36,8 @@ services:
     restart: unless-stopped
     env_file:
       - ./llmops-api/.env
-    ports:
-      - '5001:5001'
+    expose:
+      - '5001'
     volumes:
       - ./volumes/app/storage:/app/storage
       - ./volumes/app/embeddings:/app/internal/core/embeddings

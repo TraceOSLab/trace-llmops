@@ -97,18 +97,18 @@ F5 不会自动执行数据库迁移，也不会自动启动或停止 Docker Com
 
 `pnpm dev` 与 F5 是两套启动入口，不要同时启动相同的 Flask 端口或 Celery Worker。命令行 Flask 使用开发模式与自动重载；Celery 修改代码后需要重启命令。`pnpm dev` 和 `pnpm dev:api` 使用 `concurrently` 标注各进程日志；其中一个进程退出时其余进程也会停止。根目录 pnpm workspace 只管理前端和开发启动脚本；Python 依赖仍由 `llmops-api/uv.lock` 管理。
 
-## 生产基础设施 Compose
+## 生产 Compose
 
-根目录的 `compose.prod.yaml` 是独立配置，包含前端静态站点和 PostgreSQL、Redis、Weaviate 基础设施，不包含 API 或 Celery Worker 镜像。前端通过 `${WEB_PORT:-5173}` 发布到宿主机；数据库、缓存和向量服务不发布端口。若 API/Worker 运行在 Compose 网络之外，需要另行规划安全的网络连接方式。它不是完整的应用生产部署方案。
+根目录的 `compose.prod.yaml` 是独立配置，包含入口 Nginx、前端、Flask API、Celery 和 PostgreSQL、Redis、Weaviate。入口发布 80 与 443，HTTP 重定向到 `https://llmops.qiuyouyou.cn`；HTTPS 的 `/` 转发到 `llmops-web:3000`，`/api/` 去掉前缀后转发到 `llmops-api:5001`。其余服务只在 Compose 网络内通信。
 
-生产主机应使用独立的 `.env`，至少设置强随机 `POSTGRES_PASSWORD`、`REDIS_PASSWORD` 和 `WEAVIATE_API_KEY`。还需设置 `WEB_API_BASE_URL` 为访客浏览器可访问的 API 地址；它会在 Vite 构建时写入前端文件，修改后须重新构建镜像。`WEB_PORT` 可调整前端宿主机端口。不要将 `.env.example` 的示例密码用于生产，也不要提交 `.env`。数据由 Docker 命名卷持久化。启动和停止：
+生产主机应单独编写环境文件并使用强随机凭证。前端构建时 API 地址由 Compose 固定为 `/api`；升级旧的 API 直连配置需要重建前端。应用与数据目录通过宿主机 `volumes/` 持久化，需先配置写入权限、准备模型和迁移数据库，并在 `nginx/ssl/` 上传域名证书与私钥。具体步骤见 [生产部署说明](production.md)。完成首次准备后可统一启动和停止：
 
 ```bash
 docker compose -f compose.prod.yaml up -d --build
 docker compose -f compose.prod.yaml down
 ```
 
-前端 Nginx 支持 Vue Router 路由回退，浏览器直接请求 API；部署时需确认 API 的 HTTPS、CORS 和鉴权配置与前端地址匹配。基础设施通过 Docker 命名卷保存数据，应安排备份并确保磁盘空间充足。若 API/Worker 将部署在其他容器、主机或托管平台，应先确定网络、认证和数据服务托管方式，再调整配置。
+前端 Nginx 支持 Vue Router 路由回退，入口 Nginx 的 HTTPS API 代理支持 SSE 流式传输。应安排证书续期和数据目录备份，并确保磁盘空间充足。
 
 如果当前功能不涉及文档索引或其他异步任务，可以改选 `Flask API` 单独启动；Flask 本身不依赖 Worker 进程一直在线。
 

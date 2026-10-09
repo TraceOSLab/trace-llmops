@@ -1,22 +1,28 @@
-# 单服务器生产部署：Flask API 与 Celery
+# 单服务器生产部署：Nginx、前端、Flask API 与 Celery
 
-从仓库根目录操作，服务器需要 Docker Engine 和 Docker Compose v2。当前阶段完成 API、Celery 以及现有前端静态镜像的构建与启动，不配置 Nginx API 反向代理、域名或 SSL。
+从仓库根目录操作，服务器需要 Docker Engine 和 Docker Compose v2。入口 Nginx 通过 `https://llmops.qiuyouyou.cn` 提供前端与 API，HTTP 80 自动重定向到 HTTPS 443。
 
 ## 服务与配置位置
 
-`compose.prod.yaml` 包含 `llmops-web`、`llmops-api`、`llmops-celery`、`postgres`、`redis`、`weaviate`。API 与 Celery 使用同一个 `llmops-api/Dockerfile` 和 `docker/entrypoint.sh`，由环境变量 `MODE` 选择进程。入口使用 `exec`，容器停止信号能传给 Gunicorn/Celery。
+`compose.prod.yaml` 包含 `llmops-nginx`、`llmops-web`、`llmops-api`、`llmops-celery`、`postgres`、`redis`、`weaviate`。API 与 Celery 使用同一个 `llmops-api/Dockerfile` 和 `docker/entrypoint.sh`，由环境变量 `MODE` 选择进程。入口使用 `exec`，容器停止信号能传给 Gunicorn/Celery。
 
 | 文件 | 用途 |
 | --- | --- |
-| 根目录 `.env` | Compose 插值：项目名、数据服务凭证、前端构建时 API 地址 |
+| 根目录 `.env` | Compose 插值：项目名、数据服务凭证 |
 | `llmops-api/.env` | API/Celery 通过 `env_file` 读取的公共应用配置，默认 `MODE=api` |
 | `llmops-api/.env.celery` | Celery 后加载的覆盖文件：`MODE=celery`、并发和日志级别 |
+| `nginx/nginx.conf` | 入口 Nginx 主配置与 Docker DNS |
+| `nginx/proxy.conf` | 通用代理请求头和超时 |
+| `nginx/conf.d/default.conf` | `/` 与 `/api/` 分流、SSE 和上传配置 |
+| `nginx/ssl/` | 服务器单独上传的域名证书链和私钥，只读挂载，不提交 Git |
 
 API/Celery 的 Compose 配置没有 `environment`。数据服务沿用已有配置。Celery 覆盖文件只保存与进程有关的差异，数据库、Redis、模型供应商等公共设置仍只维护一份。
 
-API 暂时发布 `5001:5001`，前端发布 `5173:80`。数据库、Redis、Weaviate 通过内部服务名访问，不发布宿主机端口。当前前端 Nginx 仅提供静态文件，因此浏览器直接访问 API 地址；`WEB_API_BASE_URL` 必须是浏览器可达的 `http://服务器IP:5001`，不能填 Docker 内部的 `llmops-api`，也不能用服务器的 `localhost`。
+只有入口 Nginx 发布宿主机 `80:80` 和 `443:443`，80 使用 308 重定向到固定域名的 HTTPS 地址，保留请求方法、路径和查询参数。HTTPS 的 `/` 转发到 `llmops-web:3000`，前端容器内的 Nginx 提供静态文件与 Vue 路由回退；`/api/` 转发到 `llmops-api:5001`，去掉 `/api/` 前缀，例如 `/api/apps` 到达 Flask 时为 `/apps`。TLS 在入口 Nginx 终止，内部代理继续使用 HTTP，并通过 `X-Forwarded-Proto: https` 传递入口协议。API、前端和数据服务均不发布宿主机端口。
 
-Vite 在构建时把 API 地址写进 JavaScript，给前端容器添加运行时 `env_file` 不会改变它。因此前端继续用根目录 `.env` 中的 `WEB_API_BASE_URL` 传入构建参数；更改地址后必须重建前端镜像。
+Compose 将前端构建参数 `WEB_API_BASE_URL` 固定为 `/api`，浏览器通过同一地址访问页面和 API。服务器根目录 `.env` 中旧的 `WEB_API_BASE_URL` 已不参与生产构建，可删除。Vite 在构建时写入这个地址，升级到本配置时必须重建前端镜像。
+
+API 代理关闭响应缓冲和压缩，保留 SSE 逐段传输；读取超时为相邻两次上游读取之间的 600 秒，不是整个会话时长。上传请求上限为 20 MiB，为后端 15 MiB 文件限制留出 multipart 开销。上游使用 Docker DNS 动态解析，重建 API/前端容器后会刷新地址。动态解析配置要求 Nginx 1.27.3 或更新版本，入口使用 `nginx:stable-alpine`。
 
 ## 1. 在服务器编写环境文件
 
@@ -29,7 +35,7 @@ cp llmops-api/.env.celery.example llmops-api/.env.celery
 chmod 600 .env llmops-api/.env llmops-api/.env.celery
 ```
 
-根目录 `.env` 填写 `PROJECT_NAME`、`POSTGRES_USER`、`POSTGRES_PASSWORD`、`REDIS_PASSWORD`、`WEAVIATE_API_KEY` 与 `WEB_API_BASE_URL`。后端 `.env` 配齐 JWT、COS、所选模型供应商等业务配置，并改为：
+根目录 `.env` 填写 `PROJECT_NAME`、`POSTGRES_USER`、`POSTGRES_PASSWORD`、`REDIS_PASSWORD`、`WEAVIATE_API_KEY`。后端 `.env` 配齐 JWT、COS、所选模型供应商等业务配置，并改为：
 
 ```dotenv
 FLASK_ENV=production
@@ -66,7 +72,7 @@ CELERY_WORKER_AMOUNT=1
 CELERY_LOG_LEVEL=INFO
 ```
 
-API 保持一个 Gunicorn worker：现有 Agent/SSE 队列在进程内，不支持多 API 进程共享。并发请求由 `gthread` 线程处理。Celery 从一个 prefork 子进程开始，避免多份嵌入模型占用过多内存。修改 `LLMOPS_PORT` 时也要同步 Compose 端口映射和前端构建地址。
+API 保持一个 Gunicorn worker：现有 Agent/SSE 队列在进程内，不支持多 API 进程共享。并发请求由 `gthread` 线程处理。Celery 从一个 prefork 子进程开始，避免多份嵌入模型占用过多内存。修改 `LLMOPS_PORT` 时也要同步 Compose 的 `expose` 和 `nginx/conf.d/default.conf` 中的 API 上游端口。
 
 Celery 的 `broker_url` 和 `result_backend` 使用 `REDIS_USERNAME`、`REDIS_PASSWORD` 构造认证信息，并对 URL 中的凭证进行编码。当前 Compose 的 Redis 使用默认用户密码认证，保持 `REDIS_USERNAME=` 即可；只有在 Redis 中配置了命名 ACL 用户时才填写对应用户名。用户名和密码均为空时，URL 不包含认证信息。
 
@@ -81,7 +87,15 @@ docker compose -f compose.prod.yaml ps
 
 API/Celery 等待 PostgreSQL 和 Redis 健康检查通过；Weaviate 目前只等待容器启动，不代表其就绪。构建需要下载基础镜像、系统包和锁文件中的 Python/Node 依赖。后端按 `uv.lock` 安装，Linux x86_64 上的 PyTorch CUDA 依赖会使镜像较大。
 
-数据库沿用 `./volumes/postgres/data`，Redis 使用 `./volumes/redis/data`，Weaviate 使用 `./volumes/weaviate`。API/Celery 共享 `api_storage` 日志/缓存卷和 `embeddings_cache` 模型卷。后端以 UID/GID `10001` 的非 root 用户运行；如果导入已有卷，需保证这两个应用卷对该用户可写。
+后端 Dockerfile 在构建阶段和运行阶段的 `apt-get update` 前，将 Debian 普通源和安全更新源切换到清华镜像，保留 Bookworm 套件和签名校验配置。这只加速容器中的 APT 系统包下载，不影响宿主机软件源、Docker 基础镜像、uv 或 pnpm 依赖源。正在运行的构建不会自动加载修改；更新服务器上的 Dockerfile 后停止原构建，再执行上面的 build 命令，无需添加 `--no-cache`。下载速度以服务器实际结果为准。
+
+数据库沿用 `./volumes/postgres/data`，Redis 使用 `./volumes/redis/data`，Weaviate 使用 `./volumes/weaviate`。API/Celery 共享宿主机 `./volumes/app/storage` 日志/缓存目录和 `./volumes/app/embeddings` 模型目录。后端以 UID/GID `10001` 的非 root 用户运行；首次部署在运行应用命令前创建可写目录：
+
+```bash
+sudo install -d -m 0755 -o 10001 -g 10001 volumes/app/storage volumes/app/embeddings
+```
+
+如果导入已有数据，需保证这两个目录中的文件也对该用户可读写。
 
 ## 3. 准备嵌入模型并迁移数据库
 
@@ -115,18 +129,46 @@ docker compose -f compose.prod.yaml run --rm --no-deps \
 
 迁移失败先解决错误，再启动应用。`MIGRATION_ENABLED` 默认关闭，建议使用一次性命令；设为 `true` 只让 API 启动时迁移，Celery 不迁移。
 
-## 4. 启动和检查应用
+## 4. 配置域名与 HTTPS 证书
 
-```bash
-docker compose -f compose.prod.yaml up -d llmops-api llmops-celery llmops-web
-docker compose -f compose.prod.yaml ps
-docker compose -f compose.prod.yaml logs --tail=100 llmops-api llmops-celery
-curl -fsS http://127.0.0.1:5001/apps
+将域名 `llmops.qiuyouyou.cn` 的 A 记录指向服务器 `124.220.175.85`。如果配置了 AAAA 记录，也要确保其指向该服务器可用的 IPv6 地址，否则删除这条不适用的记录。腾讯云安全组与服务器防火墙需允许 TCP 80 和 443，且这两个宿主机端口不能已被其他进程占用。
+
+在服务器仓库根目录的 `nginx/ssl/` 放置：
+
+```text
+nginx/ssl/llmops.qiuyouyou.cn_bundle.crt
+nginx/ssl/llmops.qiuyouyou.cn.key
 ```
 
-无 Token 的 `/apps` 应返回鉴权失败 JSON，用于检查 HTTP 与鉴权链路；不验证数据库 Schema、模型或业务成功。不要使用会调用模型的 `/ping`。Celery 日志应出现 `ready` 和注册的任务。
+证书须覆盖 `llmops.qiuyouyou.cn`。`.crt` 为 PEM 格式的完整证书链，域名证书在前、中间证书在后；`.key` 为匹配的、可无交互加载的 PEM 私钥。下载包文件名不同时，可重命名为上述名称，或同步修改 `nginx/conf.d/default.conf` 的两个路径。证书链与权限要求见 [Nginx HTTPS 文档](https://nginx.org/en/docs/http/configuring_https_servers.html)。
 
-浏览器访问 `http://服务器IP:5173`，当前阶段需要服务器允许前端 `5173` 和 API `5001` 端口。登录、流式聊天、停止任务、文档索引需要随后进行真实业务验证，模型调用可能产生费用。Nginx 代理与 SSL 留待后续配置。
+```bash
+mkdir -p nginx/ssl
+# 上传证书与私钥后执行：
+chmod 644 nginx/ssl/llmops.qiuyouyou.cn_bundle.crt
+chmod 600 nginx/ssl/llmops.qiuyouyou.cn.key
+docker compose -f compose.prod.yaml run --rm --no-deps llmops-nginx nginx -t
+```
+
+证书目录只读挂载到入口容器 `/etc/nginx/ssl`，无需重建镜像。没有证书文件时 Nginx 无法启动；配置检查通过后再启动入口。Git 和 Docker 构建已忽略证书目录中的文件，仅保留 `README.md` 说明。
+
+若使用 GitHub 登录，将服务器 `llmops-api/.env` 中的 `GITHUB_REDIRECT_URI` 以及 GitHub OAuth App 的回调地址同步设置为 `https://llmops.qiuyouyou.cn/auth/authorize/github`；这是前端回调页面，不加 `/api` 前缀。环境变量变更后需要重新创建 API/Celery 容器。
+
+## 5. 启动和检查应用
+
+```bash
+docker compose -f compose.prod.yaml up -d llmops-api llmops-celery llmops-web llmops-nginx
+docker compose -f compose.prod.yaml ps
+docker compose -f compose.prod.yaml exec llmops-nginx nginx -t
+docker compose -f compose.prod.yaml logs --tail=100 llmops-api llmops-celery llmops-nginx
+curl -I http://llmops.qiuyouyou.cn/
+curl --resolve llmops.qiuyouyou.cn:443:127.0.0.1 -fsS https://llmops.qiuyouyou.cn/
+curl --resolve llmops.qiuyouyou.cn:443:127.0.0.1 -sS -i https://llmops.qiuyouyou.cn/api/apps
+```
+
+无 Token 的 `/api/apps` 应返回后端鉴权失败 JSON，用于检查代理、HTTP 与鉴权链路；不验证数据库 Schema、模型或业务成功。不要使用会调用模型的 `/api/ping`。Celery 日志应出现 `ready` 和注册的任务。
+
+HTTP 检查应返回 308 和 HTTPS 地址；两个 HTTPS 检查通过本机端口验证证书及代理，不依赖公网 DNS。浏览器访问 `https://llmops.qiuyouyou.cn/`，不要使用 HTTPS IP 地址代替域名。前端 5173 和 API 5001 已不发布，不需要开放。登录、流式聊天、停止任务、文档索引需要随后进行真实业务验证，模型调用可能产生费用。
 
 ## 更新和数据保留
 
@@ -136,6 +178,27 @@ curl -fsS http://127.0.0.1:5001/apps
 docker compose -f compose.prod.yaml up -d --force-recreate llmops-api llmops-celery
 ```
 
-代码更新后重建镜像；如果有数据库迁移，先备份并停止应用，执行一次迁移，再启动。前端地址变更也要重建前端镜像。
+代码更新后重建镜像；如果有数据库迁移，先备份并停止应用，执行一次迁移，再启动。升级本次入口代理配置时执行：
 
-`docker compose -f compose.prod.yaml down` 停止容器并保留数据。不要加 `-v`，否则会删除应用日志与模型缓存卷；也不要删除 `volumes/`。本地环境文件和已有数据目录属于服务器部署状态，更新代码时保留。
+```bash
+docker compose -f compose.prod.yaml build llmops-web
+docker compose -f compose.prod.yaml up -d llmops-api llmops-celery llmops-web llmops-nginx
+```
+
+只修改入口 Nginx 配置文件时无需构建镜像，检查语法后重新加载：
+
+```bash
+docker compose -f compose.prod.yaml exec llmops-nginx nginx -t
+docker compose -f compose.prod.yaml exec llmops-nginx nginx -s reload
+```
+
+从旧 HTTP 配置升级到本次 HTTPS 配置时，先上传证书并检查，再创建包含 443 端口与证书挂载的入口容器；单独 reload 不能新增 Docker 端口映射或挂载：
+
+```bash
+docker compose -f compose.prod.yaml run --rm --no-deps llmops-nginx nginx -t
+docker compose -f compose.prod.yaml up -d --no-deps llmops-nginx
+```
+
+HTTPS 升级继续使用前端 `/api` 地址，无需再次构建前端。证书续期由服务器单独处理；更新 `nginx/ssl` 中的证书和私钥后执行 `nginx -t` 与 `nginx -s reload`，Nginx 会重新读取该目录中的文件。
+
+`docker compose -f compose.prod.yaml down` 停止容器并保留 `volumes/` 中的绑定目录数据；不要删除这些目录。本地环境文件和已有数据目录属于服务器部署状态，更新代码时保留。
