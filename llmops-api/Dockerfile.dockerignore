@@ -1,0 +1,16 @@
+# 此文件优先于根 .dockerignore，仅发送后端及入口脚本。
+**
+!llmops-api/
+!llmops-api/**
+!docker/
+!docker/entrypoint.sh
+**/.env*
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.cache
+llmops-api/storage
+llmops-api/internal/core/embeddings
+llmops-api/test
+llmops-api/docs

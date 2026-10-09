@@ -8,6 +8,7 @@
 
 import os
 from typing import Any
+from urllib.parse import quote
 
 from .default_config import DEFAULT_CONFIG
 
@@ -51,9 +52,15 @@ class Config:
         self.REDIS_USE_SSL = _get_bool_env("REDIS_USE_SSL")
 
         # Celery配置
+        redis_auth = ""
+        if self.REDIS_USERNAME or self.REDIS_PASSWORD:
+            username = quote(self.REDIS_USERNAME or "", safe="")
+            password = quote(self.REDIS_PASSWORD or "", safe="")
+            redis_auth = f"{username}:{password}@"
+        redis_url = f"redis://{redis_auth}{self.REDIS_HOST}:{self.REDIS_PORT}"
         self.CELERY = {
-            "broker_url": f"redis://{self.REDIS_HOST}:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{int(_get_env('CELERY_BROKER_DB'))}",
-            "result_backend": f"redis://{self.REDIS_HOST}:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{int(_get_env('CELERY_RESULT_BACKEND_DB'))}",
+            "broker_url": f"{redis_url}/{int(_get_env('CELERY_BROKER_DB'))}",
+            "result_backend": f"{redis_url}/{int(_get_env('CELERY_RESULT_BACKEND_DB'))}",
             "task_ignore_result": _get_bool_env("CELERY_TASK_IGNORE_RESULT"),
             "result_expires": int(_get_env("CELERY_RESULT_EXPIRES")),
             "broker_connection_retry_on_startup": _get_bool_env(

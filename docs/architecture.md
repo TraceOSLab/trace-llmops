@@ -58,4 +58,6 @@ HTTP 请求、Celery 任务、索引工作线程和 Agent 检索工具各自在�
 
 ## 配置与密钥
 
+生产 Compose 中 `llmops-api` 与 `llmops-celery` 共用后端镜像和 `docker/entrypoint.sh`。两者通过 `env_file` 加载 `llmops-api/.env`，Celery 再加载 `llmops-api/.env.celery` 覆盖 `MODE=celery`。API 默认一个 Gunicorn `gthread` worker；Celery 默认一个 prefork 子进程。日志/运行缓存和本地嵌入模型分别保存到两个共享卷。当前阶段 API 直接发布 `5001`，前端静态服务发布 `5173`，尚未配置 API 反向代理或 SSL。配置位置与启动步骤见 [生产部署说明](runbooks/production.md)。
+
 配置由 Flask Factory 从环境变量加载。只有 `.env.example` 可作为配置项参考；Codex 不应读取或输出 `.env`。当前尚未建立 CI，测试会继承本地配置，因此运行测试前要确认不会连接生产资源或调用付费模型。

@@ -10,6 +10,53 @@ services:
     restart: unless-stopped
     ports:
       - '5173:80'
+    depends_on:
+      - llmops-api
+
+  llmops-api:
+    image: ${PROJECT_NAME}-api:0.1.0
+    build:
+      context: .
+      dockerfile: llmops-api/Dockerfile
+    container_name: ${PROJECT_NAME}-api
+    restart: unless-stopped
+    env_file:
+      - ./llmops-api/.env
+    ports:
+      - '5001:5001'
+    volumes:
+      - api_storage:/app/storage
+      - embeddings_cache:/app/internal/core/embeddings
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      weaviate:
+        condition: service_started
+    stop_grace_period: 60s
+
+  llmops-celery:
+    image: ${PROJECT_NAME}-api:0.1.0
+    build:
+      context: .
+      dockerfile: llmops-api/Dockerfile
+    container_name: ${PROJECT_NAME}-celery
+    restart: unless-stopped
+    env_file:
+      - ./llmops-api/.env
+      - ./llmops-api/.env.celery
+    volumes:
+      - api_storage:/app/storage
+      - embeddings_cache:/app/internal/core/embeddings
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      weaviate:
+        condition: service_started
+    stop_grace_period: 60s
 
   postgres:
     image: postgres:17-alpine
@@ -22,7 +69,7 @@ services:
     volumes:
       - ./volumes/postgres/data:/var/lib/postgresql/data
       # 初始化脚本空数据下挂载（.sql/.sh）
-      - ./docker/postgres/init.sql:/docker-entrypoint-init.sql
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d llmops']
       interval: 10s
@@ -69,3 +116,5 @@ volumes:
   postgres_data:
   redis_data:
   weaviate_data:
+  api_storage:
+  embeddings_cache:
