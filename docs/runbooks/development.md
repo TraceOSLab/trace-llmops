@@ -54,7 +54,7 @@ llmops-api/.venv/bin/python
 
 需要只调试一个进程时，选择 `Flask API` 或 `Celery Worker` 后按 F5 即可。
 
-F5 不会自动执行数据库迁移，也不会自动启动或停止 Docker Compose。迁移可能改变数据结构，Docker 基础设施通常跨多个调试会话复用，把它们绑定到每次 F5 会造成不必要的副作用。首次开发或基础设施未运行时，仍应先从仓库根目录执行 `docker compose -f compose.yaml -f compose.override.yaml up -d`。
+F5 不会自动执行数据库迁移，也不会自动启动或停止 Docker Compose。迁移可能改变数据结构，Docker 基础设施通常跨多个调试会话复用，把它们绑定到每次 F5 会造成不必要的副作用。首次开发或基础设施未运行时，仍应先从仓库根目录执行 `docker compose -f compose.dev.yaml up -d`。
 
 ## 使用 tasks.json 启动任务
 

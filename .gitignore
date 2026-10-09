@@ -28,6 +28,6 @@ __pycache__/
 *.pyc
 
 # 文档
-docs/
+llmops-api/docs/
 
 llmops-web-demo/
