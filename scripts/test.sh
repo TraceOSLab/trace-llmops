@@ -4,7 +4,7 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 COMPOSE_FILE="$REPO_ROOT/docker-compose.test.yml"
-COMPOSE_PROJECT="trace-llmops-test"
+COMPOSE_PROJECT="youyou-llmops-test"
 
 cleanup() {
     if [ "${KEEP_TEST_DATABASE:-0}" = "1" ]; then

@@ -1,5 +1,7 @@
 # 后端稳健性阶段 0：基线证据
 
+品牌重命名后，runner 的新报告目录为 `youyou-robustness-baseline/`；下文旧日志及报告路径保留当时的名称，用于记录历史验证证据。
+
 日期：2026-09-22。业务代码基线：`b46f4a5`，开始时工作区干净。范围及问题跟踪见[稳健性计划](robustness-plan.md)。本文件记录实际结果，不将现有测试通过解释为功能已全面加固。
 
 ## 执行结果
@@ -32,7 +34,7 @@ HTTP 的 teardown error 附着在最后一个模型目录测试上，但错误�
 复现时在仓库根目录启动已有测试服务：
 
 ```sh
-docker compose -p trace-llmops-test -f docker-compose.test.yml up -d --wait --pull never
+docker compose -p youyou-llmops-test -f docker-compose.test.yml up -d --wait --pull never
 ```
 
 然后在 `llmops-api/` 分别执行：
@@ -45,12 +47,12 @@ uv run --offline --no-sync python ../scripts/robustness_baseline.py integration
 
 前提是已有依赖环境、本地模型/FAISS 资产和 PostgreSQL 镜像。禁止为了复现而连接开发数据库或开启真实模型测试。`--no-sync --offline` 不安装新依赖；当前 `.python-version` 的 `w3.11` 值被 uv 忽略，已登记为待修问题。
 
-每次 runner 在系统临时目录的 `trace-robustness-baseline/` 生成 `unit.xml`、`integration.xml`；integration 另生成 `routes.json`，含每个 URL、方法、endpoint 和访问它的测试标识。报告随重跑覆盖，本文件保存本次结论与清单。最初控制台日志留在 `/private/tmp/trace-baseline-unit.log`、`/private/tmp/trace-baseline-migrate.log`、`/private/tmp/trace-baseline-integration.log`，不作为长期版本化证据。
+每次 runner 在系统临时目录的 `youyou-robustness-baseline/` 生成 `unit.xml`、`integration.xml`；integration 另生成 `routes.json`，含每个 URL、方法、endpoint 和访问它的测试标识。报告随重跑覆盖，本文件保存本次结论与清单。最初的单元测试、迁移与集成测试控制台日志仅保存在系统临时目录，不作为长期版本化证据；品牌重命名不迁移历史临时文件。
 
 测试完成后仅清理测试项目：
 
 ```sh
-docker compose -p trace-llmops-test -f docker-compose.test.yml down
+docker compose -p youyou-llmops-test -f docker-compose.test.yml down
 ```
 
 测试数据库使用 tmpfs；删除测试容器后数据消失。开发用 PostgreSQL/Redis/Weaviate 容器不在该 Compose 项目中。

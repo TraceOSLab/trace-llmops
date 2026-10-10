@@ -54,7 +54,7 @@ onMounted(load)
         <span class="feature-icon"><icon-link :size="24" /></span>
         <h2 class="mt-5 mb-3">WebApp 聊天页面</h2>
         <p class="page-description">
-          访问者需要登录 Trace 账号。对话使用已发布配置，草稿修改需重新发布后生效。
+          访问者需要登录 Youyou 账号。对话使用已发布配置，草稿修改需重新发布后生效。
         </p>
         <template v-if="config.web_app.status === 'published'"
           ><label class="block mt-6 mb-2 text-gray-500 text-xs">访问链接</label

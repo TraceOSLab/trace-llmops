@@ -6,6 +6,8 @@
 
 用 VS Code 的 **File → Open Folder...** 打开仓库根目录。根目录 `.vscode/` 中的调试配置和 Task 均将后端工作目录设为 `llmops-api/`。
 
+根目录示例配置使用 `PROJECT_NAME=youyou-llmops`，开发容器默认使用该前缀。已有 `.env` 中的显式值不会自动更新；如需改名，先用原配置停止旧开发容器，再修改项目名并启动，继续保留原来的 `docker/data/` 数据目录。
+
 ## 首次初始化
 
 项目根目录负责 Docker Compose 和 pnpm workspace，`llmops-api/` 负责 Python 环境：

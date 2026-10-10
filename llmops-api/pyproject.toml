@@ -1,7 +1,7 @@
 [project]
 name = "llmops-api"
 version = "0.1.0"
-description = "Flask API and Celery workers for Trace LLMOps"
+description = "Flask API and Celery workers for Youyou LLMOps"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

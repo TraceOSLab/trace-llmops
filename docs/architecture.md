@@ -1,8 +1,8 @@
-# Trace LLMOps 架构说明
+# Youyou LLMOps 架构说明
 
 ## 系统上下文
 
-Trace LLMOps 对外提供需要认证的管理 API、应用调试 API，以及已发布应用的对话 API。PostgreSQL 保存配置和会话状态，Redis 提供缓存与任务停止标记，Celery 执行文档索引任务，Weaviate 保存向量化后的文档片段。
+Youyou LLMOps 对外提供需要认证的管理 API、应用调试 API，以及已发布应用的对话 API。PostgreSQL 保存配置和会话状态，Redis 提供缓存与任务停止标记，Celery 执行文档索引任务，Weaviate 保存向量化后的文档片段。
 
 ```mermaid
 flowchart LR

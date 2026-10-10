@@ -1,7 +1,7 @@
 services:
   llmops-nginx:
     image: nginx:stable-alpine
-    container_name: ${PROJECT_NAME}-nginx
+    container_name: ${PROJECT_NAME:-youyou-llmops}-nginx
     restart: unless-stopped
     ports:
       - '80:80'
@@ -16,23 +16,23 @@ services:
       - llmops-api
 
   llmops-web:
-    image: ${PROJECT_NAME}-web:0.1.0
+    image: ${PROJECT_NAME:-youyou-llmops}-web:0.1.0
     build:
       context: .
       dockerfile: llmops-web/Dockerfile
       args:
         WEB_API_BASE_URL: /api
-    container_name: ${PROJECT_NAME}-web
+    container_name: ${PROJECT_NAME:-youyou-llmops}-web
     restart: unless-stopped
     expose:
       - '3000'
 
   llmops-api:
-    image: ${PROJECT_NAME}-api:0.1.0
+    image: ${PROJECT_NAME:-youyou-llmops}-api:0.1.0
     build:
       context: .
       dockerfile: llmops-api/Dockerfile
-    container_name: ${PROJECT_NAME}-api
+    container_name: ${PROJECT_NAME:-youyou-llmops}-api
     restart: unless-stopped
     env_file:
       - ./llmops-api/.env
@@ -51,11 +51,11 @@ services:
     stop_grace_period: 60s
 
   llmops-celery:
-    image: ${PROJECT_NAME}-api:0.1.0
+    image: ${PROJECT_NAME:-youyou-llmops}-api:0.1.0
     build:
       context: .
       dockerfile: llmops-api/Dockerfile
-    container_name: ${PROJECT_NAME}-celery
+    container_name: ${PROJECT_NAME:-youyou-llmops}-celery
     restart: unless-stopped
     env_file:
       - ./llmops-api/.env
@@ -74,7 +74,7 @@ services:
 
   postgres:
     image: postgres:17-alpine
-    container_name: ${PROJECT_NAME}-postgres
+    container_name: ${PROJECT_NAME:-youyou-llmops}-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: llmops
@@ -92,7 +92,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: ${PROJECT_NAME}-redis
+    container_name: ${PROJECT_NAME:-youyou-llmops}-redis
     restart: unless-stopped
     command:
       - redis-server
@@ -110,7 +110,7 @@ services:
 
   weaviate:
     image: cr.weaviate.io/semitechnologies/weaviate:1.34.4
-    container_name: ${PROJECT_NAME}-weaviate
+    container_name: ${PROJECT_NAME:-youyou-llmops}-weaviate
     restart: unless-stopped
     environment:
       QUERY_DEFAULTS_LIMIT: 25

@@ -53,7 +53,7 @@ const shortcuts = [
       <div>
         <p class="eyebrow">YOUR AI WORKSPACE</p>
         <h1>从想法，到可用的 AI 应用。</h1>
-        <p class="page-description">在 Trace 中连接模型、知识与工具，构建属于你的智能工作方式。</p>
+        <p class="page-description">在 Youyou 中连接模型、知识与工具，构建属于你的智能工作方式。</p>
       </div>
       <router-link to="/assistant" class="text-link"
         >与 AI 助手一起开始 <icon-arrow-right
@@ -140,6 +140,6 @@ const shortcuts = [
         >浏览资源中心 <icon-arrow-right
       /></router-link>
     </div>
-    <footer class="page-footer">Trace LLMOPS <span>Crafted by Youyou</span></footer>
+    <footer class="page-footer">Youyou LLMOPS <span>Crafted by Youyou</span></footer>
   </div>
 </template>

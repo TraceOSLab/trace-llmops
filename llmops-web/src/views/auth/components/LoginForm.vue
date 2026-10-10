@@ -27,7 +27,7 @@ const githubLogin = async () => {
   try {
     githubLoading.value = true
     const resp = await provider('github')
-    sessionStorage.setItem('trace-login-return', destination())
+    sessionStorage.setItem('youyou-login-return', destination())
     window.location.href = resp.data.redirect_url
   } finally {
     githubLoading.value = false
@@ -60,7 +60,7 @@ const handleSubmit = async ({ errors }: { errors: Record<string, ValidatedError>
 <template>
   <div class="">
     <!-- 顶部标题 -->
-    <div class="text-gray-900 font-bold text-2xl leading-8">登录 Trace LLMOPS</div>
+    <div class="text-gray-900 font-bold text-2xl leading-8">登录 Youyou LLMOPS</div>
     <p class="text-base leading-6 text-gray-600">欢迎回来，继续构建你的 AI 应用。</p>
     <!-- 错误提示占位符 -->
     <div class="h-8 text-red-700 leading-8 line-clamp-1">{{ errorMessage }}</div>

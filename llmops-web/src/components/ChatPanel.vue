@@ -137,7 +137,7 @@ defineExpose({ reload: () => load(), busy })
         ><a-spin v-else-if="historyBusy" />
       </div>
       <div v-if="!messages.length && !historyBusy" class="chat-welcome">
-        <img src="/favicon.svg" alt="Trace" />
+        <img src="/favicon.svg" alt="Youyou" />
         <h2>{{ opening }}</h2>
         <p>清晰表达任务，让 AI 帮你迈出下一步。</p>
         <button v-for="question in questions" :key="question" @click="send(question)">
@@ -148,13 +148,13 @@ defineExpose({ reload: () => load(), busy })
         <div class="human-bubble">{{ message.query }}</div>
         <div class="assistant-answer">
           <div class="answer-label">
-            <img src="/favicon.svg" alt="" />TRACE
+            <img src="/favicon.svg" alt="" />Youyou
             <span v-if="message.status === 'running'">正在运行…</span>
           </div>
           <p class="answer-text">{{ message.answer }}</p>
           <details v-if="message.agent_thoughts?.length">
             <summary>运行过程 · {{ message.agent_thoughts.length }} 个步骤</summary>
-            <div v-for="(step, n) in message.agent_thoughts" :key="step.id || n" class="trace-step">
+            <div v-for="(step, n) in message.agent_thoughts" :key="step.id || n" class="thought-step">
               <strong>{{ step.tool || step.event }}</strong>
               <pre>{{ step.thought || step.observation }}</pre>
               <small v-if="step.usage">{{ usageLabel(step.usage) }}</small>
@@ -294,12 +294,12 @@ details {
 summary {
   cursor: pointer;
 }
-.trace-step {
+.thought-step {
   border-left: 2px solid #d9e9e0;
   margin: 10px 0;
   padding: 8px 12px;
 }
-.trace-step pre {
+.thought-step pre {
   font-size: 11px;
   max-height: 220px;
   overflow: auto;

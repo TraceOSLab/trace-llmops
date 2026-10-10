@@ -1,4 +1,4 @@
-# Trace LLMOPS · Web
+# Youyou LLMOPS · Web
 
 Youyou 的 AI 应用工作台。Vue 3 + TypeScript + Vite，浅色青绿主题，覆盖应用、工作流、知识库、工具、资源中心、开放 API、助手与已发布应用聊天。
 
@@ -24,22 +24,22 @@ VITE_API_BASE_URL=http://localhost:5000 pnpm dev:web
 ## 检查与构建
 
 ```sh
-pnpm --filter trace-llmops-web type-check
-pnpm --filter trace-llmops-web lint
-pnpm --filter trace-llmops-web test
-pnpm --filter trace-llmops-web build
-pnpm --filter trace-llmops-web preview
+pnpm --filter youyou-llmops-web type-check
+pnpm --filter youyou-llmops-web lint
+pnpm --filter youyou-llmops-web test
+pnpm --filter youyou-llmops-web build
+pnpm --filter youyou-llmops-web preview
 ```
 
 浏览器测试使用本地构建和模拟 API，不需要登录真实账号，不调用真实后端、付费模型或外部工具：
 
 ```sh
 # 已安装 Google Chrome 时
-PLAYWRIGHT_CHANNEL=chrome pnpm --filter trace-llmops-web test:e2e
+PLAYWRIGHT_CHANNEL=chrome pnpm --filter youyou-llmops-web test:e2e
 
 # 或一次性安装 Playwright Chromium，之后执行测试
-pnpm --filter trace-llmops-web exec playwright install chromium
-pnpm --filter trace-llmops-web test:e2e
+pnpm --filter youyou-llmops-web exec playwright install chromium
+pnpm --filter youyou-llmops-web test:e2e
 ```
 
 测试自身拦截所有非前端请求，API 请求由内存数据响应，其他域名直接阻断。浏览器启动需允许创建隔离用户目录。测试端口为 5179；截图与失败追踪保存在 `test-results/`，不提交。

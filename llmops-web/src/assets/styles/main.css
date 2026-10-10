@@ -85,11 +85,11 @@ h2 {
 h3 {
   font-weight: 600;
 }
-.trace-shell {
+.youyou-shell {
   display: flex;
   min-height: 100vh;
 }
-.trace-sidebar {
+.youyou-sidebar {
   position: fixed;
   inset: 0 auto 0 0;
   width: 224px;
@@ -192,7 +192,7 @@ h3 {
   color: #88939f;
   margin-left: 46px;
 }
-.trace-workspace {
+.youyou-workspace {
   margin-left: 224px;
   min-width: 0;
   width: calc(100% - 224px);
@@ -233,7 +233,7 @@ h3 {
 .mobile-toggle {
   display: none;
 }
-.collapsed .trace-sidebar {
+.collapsed .youyou-sidebar {
   width: 76px;
   padding-left: 12px;
   padding-right: 12px;
@@ -247,7 +247,7 @@ h3 {
 .collapsed .sidebar-bottom {
   display: none;
 }
-.collapsed .trace-workspace {
+.collapsed .youyou-workspace {
   margin-left: 76px;
   width: calc(100% - 76px);
 }
@@ -635,16 +635,16 @@ pre {
   }
 }
 @media (max-width: 767px) {
-  .trace-sidebar {
+  .youyou-sidebar {
     transform: translateX(-100%);
     width: 224px !important;
   }
-  .trace-workspace,
-  .collapsed .trace-workspace {
+  .youyou-workspace,
+  .collapsed .youyou-workspace {
     margin-left: 0;
     width: 100%;
   }
-  .mobile-open .trace-sidebar {
+  .mobile-open .youyou-sidebar {
     transform: translateX(0);
   }
   .mobile-open .sidebar-mask {

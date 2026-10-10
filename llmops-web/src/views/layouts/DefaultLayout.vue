@@ -41,16 +41,16 @@ async function exit() {
 }
 </script>
 <template>
-  <div class="trace-shell" :class="{ collapsed, 'mobile-open': mobileOpen }">
+  <div class="youyou-shell" :class="{ collapsed, 'mobile-open': mobileOpen }">
     <button
       v-if="mobileOpen"
       class="sidebar-mask"
       aria-label="关闭导航"
       @click="mobileOpen = false"
     />
-    <aside class="trace-sidebar">
+    <aside class="youyou-sidebar">
       <router-link to="/home" class="brand"
-        ><img src="/favicon.svg" alt="Trace" /><span>Trace <small>LLMOPS</small></span></router-link
+        ><img src="/favicon.svg" alt="Youyou" /><span>Youyou <small>LLMOPS</small></span></router-link
       >
       <nav aria-label="主导航">
         <template v-for="link in links" :key="link.path">
@@ -78,7 +78,7 @@ async function exit() {
         ><button class="signout" @click="exit">退出登录</button>
       </div>
     </aside>
-    <div class="trace-workspace">
+    <div class="youyou-workspace">
       <header class="workspace-bar">
         <button
           class="desktop-toggle icon-button"
@@ -93,7 +93,7 @@ async function exit() {
           <strong>{{
             links.find((l) => route.path.startsWith(l.path))?.label || '资源详情'
           }}</strong></span
-        ><span class="workspace-label">TRACE / PERSONAL</span>
+        ><span class="workspace-label">Youyou / PERSONAL</span>
       </header>
       <main class="workspace-main"><router-view :key="route.path" /></main>
     </div>

@@ -1,5 +1,7 @@
 # 已有后端功能稳健性加固计划
 
+品牌重命名后，runner 的新报告目录为 `youyou-robustness-baseline/`；下文旧日志及报告路径保留当时的名称，用于记录历史验证证据。
+
 ## 范围与推进规则
 
 基线日期：2026-09-22；业务代码基线：`b46f4a5`。本轮仅覆盖已有后端功能，按用户最新要求排除前端。使用场景为本人或可信开发者，保留本机和内网调用能力；代码节点只执行可信代码，不将 AST 校验视为安全沙箱。
@@ -104,7 +106,7 @@ HTTP 测试文件缩写对应 `test/integration/handler/test_*_http_routes.py`�
 - [OAuth 身份离线回归](../llmops-api/test/internal/service/test_oauth_identity.py)
 - [真实 HTTP、权限与数据库回归](../llmops-api/test/integration/handler/test_security_http_routes.py)
 
-本次控制台证据：`/private/tmp/trace-stage1-unit-red.log`、`/private/tmp/trace-stage1-oauth-red.log`、`/private/tmp/trace-stage1-oauth-integration-red.log`、`/private/tmp/trace-stage1-unit.log`、`/private/tmp/trace-stage1-standard-entry.log`。最新 XML/routes.json 位于系统临时目录 `trace-robustness-baseline/`；重跑会覆盖，长期结论以上述计数和回归源码为准。
+本次控制台证据包含单元测试、OAuth 离线与集成失败回归、修复后单元测试及标准入口日志，仅保存在系统临时目录。当前 runner 将 XML/routes.json 写入系统临时目录 `youyou-robustness-baseline/`；重跑会覆盖，品牌重命名不迁移历史临时文件，长期结论以上述计数和回归源码为准。
 
 ### 下一批与验收边界
 
@@ -125,7 +127,7 @@ HTTP 测试文件缩写对应 `test/integration/handler/test_*_http_routes.py`�
 - B19 按用户要求暂缓，不把 JWT 撤销或 OAuth state 记为已实现。
 - 用量迁移测试不再把历史用量迁移写死为最新 head，改为检查只有一个活动 head 且用量迁移仍在迁移链中；原 DDL 精度断言保留。独立测试库已跑通用户新增的 `b1263027e476` 迁移，未修改迁移历史。
 
-证据：[OAuth 并发测试](../llmops-api/test/integration/test_oauth_concurrency.py)，日志 `/private/tmp/trace-stage1b-red.log`、`/private/tmp/trace-stage1b-final.log`。
+证据：[OAuth 并发测试](../llmops-api/test/integration/test_oauth_concurrency.py)，失败回归与最终验证日志仅保存在系统临时目录。
 
 ### 应用生命周期问题及修复
 
@@ -158,7 +160,7 @@ HTTP 测试文件缩写对应 `test/integration/handler/test_*_http_routes.py`�
 - 引用所属资源在其他事务中并发删除的完整一致性尚未覆盖，本批验证已删除引用的过滤；知识库跨存储删除和工作流状态竞争分别进入阶段 4/6。
 - PostgreSQL 行锁只协调遵循该服务调用链的写入，未新增版本号唯一约束或客户端请求去重协议；不保证直接 SQL 写入的并发安全。配置读取默认模型仅是展示/解析回退，不代表真实 Provider 可用。
 
-日志：`/private/tmp/trace-stage2-red.log`、`/private/tmp/trace-stage2-concurrency.log`、`/private/tmp/trace-stage2-model-red.log`、`/private/tmp/trace-stage2-final.log`、`/private/tmp/trace-stage2-unit-final.log`。XML 与逐路由测试映射保存在系统临时目录 `trace-robustness-baseline/`，重跑会覆盖。
+失败回归、并发测试、模型失败回归与最终验证日志仅保存在系统临时目录。当前 runner 将 XML 与逐路由测试映射写入系统临时目录 `youyou-robustness-baseline/`，重跑会覆盖。
 
 下一阶段：验收后进入阶段 3，优先修复外部请求缺少超时、动态工具可选参数，并继续模型/工具/上传失败处理。
 
@@ -181,7 +183,7 @@ HTTP 测试文件缩写对应 `test/integration/handler/test_*_http_routes.py`�
 - 第一轮新测试 **22 failed / 118 passed**，修复并补充边界后 **145 passed**；天气工具补充回归先 **4 failed / 145 passed**，修复后全部离线 **149 passed / 5 skipped / 8 warnings**。
 - HTTP 集成回归 **76 passed / 303 warnings**，独立 PostgreSQL 迁移正常，测试容器和网络自动清理。该集成结果验证核心 HTTP 修复；随后天气工具改动由离线 Fake 回归单独验证。
 - 5 项跳过仍为真实模型 smoke 测试。未读取 `.env`，未访问真实模型、GitHub 或高德，不修改开发/生产数据库，未提交或推送。
-- 日志：`/private/tmp/trace-stage3-http-red.log`、`/private/tmp/trace-stage3-weather-red.log`、`/private/tmp/trace-stage3-http-final.log`、`/private/tmp/trace-stage3-http-integration.log`。
+- HTTP 与天气失败回归、HTTP 最终验证及集成测试日志仅保存在系统临时目录。
 
 ### 尚未验证与后续批次
 
@@ -241,7 +243,7 @@ HTTP 测试文件缩写对应 `test/integration/handler/test_*_http_routes.py`�
 - [上传与工具数据库状态](../llmops-api/test/integration/handler/test_tool_upload_robustness.py)
 - [工具并发创建](../llmops-api/test/integration/test_tool_concurrency.py)
 
-最终日志：`/private/tmp/trace-stage3-unit-final.log`、`/private/tmp/trace-stage3-concurrency.log`；最初失败日志对应 `trace-stage3-upload-red.log`、`trace-stage3-model-red.log`、`trace-stage3-schema-red.log`、`trace-stage3-tools-red.log`。后续重跑会覆盖临时 XML/routes.json。
+最终单元测试与并发测试日志，以及最初的上传、模型、Schema 和工具失败回归日志，仅保存在系统临时目录。后续重跑会覆盖临时 XML/routes.json。
 
 ### 受限项与未验证边界
 
@@ -422,7 +424,7 @@ HTTP 测试文件缩写对应 `test/integration/handler/test_*_http_routes.py`�
 | 已修复、已验证 | WebApp 访问者不是应用所有者时，知识库检索误用访问者账号 | 公共应用准备函数明确 resource_owner_id 与 operator_id；[真实 HTTP 与 PostgreSQL 回归](../llmops-api/test/integration/handler/test_web_app_conversation_robustness.py) 验证资源使用应用所有者、任务使用访问者、消息和会话仍属于访问者，新建/复用/断连均实际保存。 |
 | 已验证 | 原有返回和用量兼容性 | [入口回归](../llmops-api/test/internal/service/test_agent_usage_responses.py) 检查调试、WebApp、OpenAPI 流式/非流式字段、部分结果、用量与保存参数，辅助 Agent 断连仍保存停止状态；未知用量不会因正常终止被标记为完整结算。 |
 
-最终验证：`robustness_baseline.py unit` **245 passed / 5 skipped / 8 warnings**；`sh scripts/test.sh` **94 passed / 409 warnings**，隔离 PostgreSQL 容器已清理。5 个跳过项为付费模型 smoke test；警告为现有依赖弃用提示。JUnit 证据位于系统临时目录 `trace-robustness-baseline/unit.xml` 与 `integration.xml`。`git diff --check` 通过。
+最终验证：`robustness_baseline.py unit` **245 passed / 5 skipped / 8 warnings**；`sh scripts/test.sh` **94 passed / 409 warnings**，隔离 PostgreSQL 容器已清理。5 个跳过项为付费模型 smoke test；警告为现有依赖弃用提示。JUnit 证据仅保存在系统临时目录；当前 runner 使用 `youyou-robustness-baseline/unit.xml` 与 `integration.xml`，历史临时文件未迁移。`git diff --check` 通过。
 
 受限：真实供应商、Redis/Weaviate 运行故障与多进程恢复未验证；HTTP 持久化测试使用同步线程替身和独立测试事务，不作为真实数据库线程竞争证据。后台保存仍沿用现有进程内线程，不保证进程退出或数据库不可用时可靠投递；本批不新增持久化任务队列或保存重试。尚未消费就被丢弃的响应不会启动 Agent，但已创建的消息不会自动补写终止状态。
 

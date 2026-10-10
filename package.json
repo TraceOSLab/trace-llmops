@@ -1,10 +1,10 @@
 {
-  "name": "trace-llmops",
+  "name": "youyou-llmops",
   "private": true,
   "packageManager": "pnpm@11.10.0",
   "scripts": {
     "dev": "concurrently --kill-others --names web,flask,celery \"pnpm dev:web\" \"pnpm dev:flask\" \"pnpm dev:worker\"",
-    "dev:web": "pnpm --filter trace-llmops-web dev",
+    "dev:web": "pnpm --filter youyou-llmops-web dev",
     "dev:api": "concurrently --kill-others --names flask,celery \"pnpm dev:flask\" \"pnpm dev:worker\"",
     "dev:flask": "uv --directory llmops-api run flask --app app.http.app:create_app run --debug",
     "dev:worker": "uv --directory llmops-api run celery -A app.http.app:celery worker --loglevel=INFO --pool=solo"

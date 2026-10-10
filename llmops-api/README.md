@@ -1,6 +1,6 @@
 # LLMOps API
 
-Trace LLMOps 的后端服务。项目使用 Flask、SQLAlchemy、Celery、Redis、PostgreSQL 和 Weaviate；Python 依赖由 `uv` 管理。
+Youyou LLMOps 的后端服务。项目使用 Flask、SQLAlchemy、Celery、Redis、PostgreSQL 和 Weaviate；Python 依赖由 `uv` 管理。
 
 ## 本地开发
 

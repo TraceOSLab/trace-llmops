@@ -19,7 +19,7 @@ async function copy() {
 <template>
   <section class="panel">
     <p class="eyebrow">DEVELOPER / QUICK START</p>
-    <h1>将 Trace 接入你的产品</h1>
+    <h1>将 Youyou 接入你的产品</h1>
     <p class="page-description">
       先发布一个应用，再创建 API 密钥，即可从你的服务发起对话。请将密钥保存在服务端。
     </p>

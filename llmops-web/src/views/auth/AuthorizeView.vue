@@ -18,8 +18,8 @@ onMounted(async () => {
 
     // 2.更新用户授权数据并跳转到首页
     credentialStore.update(resp.data)
-    const target = sessionStorage.getItem('trace-login-return') || '/home'
-    sessionStorage.removeItem('trace-login-return')
+    const target = sessionStorage.getItem('youyou-login-return') || '/home'
+    sessionStorage.removeItem('youyou-login-return')
     await router.replace(target.startsWith('/') && !target.startsWith('//') ? target : '/home')
   } catch (error) {
     // 3.出现错误则重定向到登录页面

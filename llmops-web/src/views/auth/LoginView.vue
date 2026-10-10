@@ -5,17 +5,17 @@ import LoginForm from './components/LoginForm.vue'
   <div class="login-page">
     <section class="login-story">
       <router-link to="/home" class="brand"
-        ><img src="/favicon.svg" alt="Trace" /><span>Trace <small>LLMOPS</small></span></router-link
+        ><img src="/favicon.svg" alt="Youyou" /><span>Youyou <small>LLMOPS</small></span></router-link
       >
       <div class="story-main">
         <p class="eyebrow">IDEAS INTO INTELLIGENCE</p>
         <h1>让想法<br />拥有行动力。</h1>
         <p>连接模型与知识，编排每一个步骤。<br />在一个清晰的工作空间，让 AI 真正为你工作。</p>
         <div class="story-flow">
-          <span>知识</span><i>→</i><strong>Trace</strong><i>→</i><span>行动</span>
+          <span>知识</span><i>→</i><strong>Youyou</strong><i>→</i><span>行动</span>
         </div>
       </div>
-      <footer>Built by Youyou <span>Trace LLMOPS</span></footer>
+      <footer>Built by Youyou <span>Youyou LLMOPS</span></footer>
     </section>
     <section class="login-form">
       <div>

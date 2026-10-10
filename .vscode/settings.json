@@ -9,7 +9,7 @@
       "server": "localhost",
       "port": 5432,
       "driver": "PostgreSQL",
-      "name": "trace-llmops",
+      "name": "youyou-llmops",
       "database": "postgres",
       "username": "admin",
       "password": "adminqwer1234"

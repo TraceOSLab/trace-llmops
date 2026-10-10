@@ -61,7 +61,7 @@ export const useDeleteApiKey = () => {
     Modal.warning({
       title: '要删除该API秘钥吗?',
       content:
-        '删除秘钥后，无法使用该秘钥访问 Trace LLMOPS 中的所有应用，并且无法恢复，如果临时关闭请使用禁用功能。',
+        '删除秘钥后，无法使用该秘钥访问 Youyou LLMOPS 中的所有应用，并且无法恢复，如果临时关闭请使用禁用功能。',
       hideCancel: false,
       onOk: async () => {
         // 1.点击确定后向API接口发起请求

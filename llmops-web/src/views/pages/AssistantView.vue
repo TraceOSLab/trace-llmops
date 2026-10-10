@@ -24,7 +24,7 @@ async function clear() {
       endpoint="/assistant-agent/chat"
       history-endpoint="/assistant-agent/messages"
       :stop-endpoint="(task) => `/assistant-agent/chat/${task}/stop`"
-      opening="你好，我是 Trace AI 助手。"
+      opening="你好，我是 Youyou AI 助手。"
       :questions="['帮我规划一个知识库问答应用', '如何设计一个工作流？', '介绍一下 RAG 的工作方式']"
       :suggestions="true"
     />

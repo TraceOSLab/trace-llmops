@@ -24,6 +24,14 @@ Compose 将前端构建参数 `WEB_API_BASE_URL` 固定为 `/api`，浏览器通
 
 API 代理关闭响应缓冲和压缩，保留 SSE 逐段传输；读取超时为相邻两次上游读取之间的 600 秒，不是整个会话时长。上传请求上限为 20 MiB，为后端 15 MiB 文件限制留出 multipart 开销。上游使用 Docker DNS 动态解析，重建 API/前端容器后会刷新地址。动态解析配置要求 Nginx 1.27.3 或更新版本，入口使用 `nginx:stable-alpine`。
 
+## 品牌重命名与现有部署
+
+项目品牌和包名统一为 Youyou LLMOps。根目录 `.env.example` 使用 `PROJECT_NAME=youyou-llmops`；dev/prod Compose 在未提供该变量时也使用此默认值，生产镜像名称为 `youyou-llmops-api:0.1.0` 和 `youyou-llmops-web:0.1.0`。已有 `.env` 的显式值仍优先，因此升级代码不会自动重命名正在运行的容器。后端示例中的 `LANGSMITH_PROJECT` 也已更新为 `youyou-llmops`。
+
+现有服务器先保留原部署目录、Compose 项目名及 `PROJECT_NAME`，完成代码升级。若要切换容器和镜像名称，安排停机窗口：在原目录、使用原 Compose 项目名停止旧服务（不要加 `-v`），再自行将根目录 `.env` 的 `PROJECT_NAME` 设置为 `youyou-llmops`，使用 `docker compose -p youyou-llmops -f compose.prod.yaml up -d --build` 启动，并验证服务健康。项目名由 `-p`、`COMPOSE_PROJECT_NAME` 或目录名决定，`PROJECT_NAME` 仅用于本仓库的镜像和容器命名。
+
+当前数据使用相对路径绑定挂载；切换名称时必须继续使用原来的 `volumes/` 数据目录。移动仓库后需先确认数据目录完整，避免从空目录启动数据库。此次重命名不会迁移服务器文件、数据或正在运行的容器。
+
 ## 1. 在服务器编写环境文件
 
 模板仅供参考；自行在服务器编写文件，不要提交密钥。如果文件还不存在，可复制：
@@ -132,7 +140,7 @@ sudo docker compose --progress plain -f compose.prod.yaml build llmops-api
 sudo docker compose -f compose.prod.yaml up -d --pull never
 ```
 
-API 与 Celery 共用 `trace-llmops-api:0.1.0` 镜像，构建 API 一次即可供两者使用；已完成的前端镜像可复用。`--progress plain` 输出完整构建日志，不需要 `--no-cache`，也不要清理构建缓存。新日志应安装 `torch==2.10.0+cpu` 和 `torchvision==0.25.0+cpu`，不再出现 `nvidia-*` 或 `triton`。此命令假定其他服务镜像已在本地；缺少镜像时先执行上面的预拉取脚本。
+API 与 Celery 共用 `youyou-llmops-api:0.1.0` 镜像，构建 API 一次即可供两者使用；已完成的前端镜像可复用。`--progress plain` 输出完整构建日志，不需要 `--no-cache`，也不要清理构建缓存。新日志应安装 `torch==2.10.0+cpu` 和 `torchvision==0.25.0+cpu`，不再出现 `nvidia-*` 或 `triton`。此命令假定其他服务镜像已在本地；缺少镜像时先执行上面的预拉取脚本。
 
 PyTorch CPU 源配置参考 [uv 官方说明](https://docs.astral.sh/uv/guides/integration/pytorch/) 与 [上海交大镜像说明](https://mirrors.sjtug.sjtu.edu.cn/docs/pytorch-wheels)。
 

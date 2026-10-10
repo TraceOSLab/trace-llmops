@@ -72,7 +72,7 @@ onMounted(load)
   <div class="webchat">
     <aside>
       <router-link to="/home" class="brand"
-        ><img src="/favicon.svg" alt="Trace" /><span>Trace <small>LLMOPS</small></span></router-link
+        ><img src="/favicon.svg" alt="Youyou" /><span>Youyou <small>LLMOPS</small></span></router-link
       ><a-button long type="primary" :disabled="chat?.busy" @click="select('')"
         ><icon-plus /> 新对话</a-button
       >

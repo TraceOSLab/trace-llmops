@@ -154,6 +154,6 @@ router.beforeEach(async (to, from) => {
   }
 })
 router.afterEach((to) => {
-  document.title = `${to.path.includes('/space/apps/') ? '应用' : to.path.includes('/space/workflows/') ? '工作流' : '工作空间'} · Trace LLMOPS`
+  document.title = `${to.path.includes('/space/apps/') ? '应用' : to.path.includes('/space/workflows/') ? '工作流' : '工作空间'} · Youyou LLMOPS`
 })
 export default router
