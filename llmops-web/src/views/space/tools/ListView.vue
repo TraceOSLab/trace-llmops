@@ -1,256 +1,198 @@
 <script setup lang="ts">
 import { uploadAdapter } from '@/utils/upload-adapter'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   createApiToolProvider,
   deleteApiToolProvider,
   getApiToolProvider,
-  getApiToolProvidersWithPage,
   updateApiToolProvider,
   validateOpenAPISchema,
 } from '@/services/api-tool'
+import { useGetApiToolProvidersWithPage } from '@/hooks/use-tool'
+import { parseApiToolSchema } from '@/utils/api-tool-schema'
 import { uploadImage } from '@/services/upload-file'
-import { type CreateApiToolProviderRequest } from '@/models/api-tool'
+import type { CreateApiToolProviderRequest } from '@/models/api-tool'
 import moment from 'moment/moment'
 import { typeMap } from '@/config'
 import { Form, Message, Modal, type ValidatedError } from '@arco-design/web-vue'
 
 const route = useRoute()
-const props = defineProps({
-  createType: {
-    type: String,
-    required: true,
-  },
-})
+const router = useRouter()
+const props = defineProps({ createType: { type: String, required: true } })
 const emits = defineEmits(['update-create-type'])
-const providers = reactive<Array<any>>([])
-const paginator = reactive({
-  current_page: 1,
-  page_size: 20,
-  total_page: 0,
-  total_record: 0,
-})
-const form = reactive({
+const {
+  api_tool_providers: providers,
+  paginator,
+  loading,
+  error: loadError,
+  loadApiToolProviders,
+} = useGetApiToolProvidersWithPage()
+const emptyForm = () => ({
   fileList: [] as any[],
   icon: '',
   name: '',
   openapi_schema: '',
   headers: [] as { key: string; value: string }[],
 })
+const form = reactive(emptyForm())
 const formRef = ref<InstanceType<typeof Form>>()
-const showIdx = ref<number>(-1)
-const loading = ref<boolean>(false)
-const showUpdateModal = ref<boolean>(false)
-const showUpdateModalLoading = ref<boolean>(false)
-const submitLoading = ref<boolean>(false)
-const tools = computed(() => {
-  try {
-    // 1.解析openapi_schema数据
-    const available_tools = []
-    const openapi_schema = JSON.parse(form.openapi_schema)
+const selectedProviderId = ref('')
+const selectedProvider = computed(() =>
+  providers.find((item) => item.id === selectedProviderId.value),
+)
+const editingProviderId = ref('')
+const showUpdateModal = ref(false)
+const showUpdateModalLoading = ref(false)
+const submitLoading = ref(false)
+const schemaError = ref('')
+const validatedSchema = ref('')
+const tools = computed(() => parseApiToolSchema(form.openapi_schema).tools)
 
-    // 2.检测是否存在paths路径
-    if ('paths' in openapi_schema) {
-      // 3.循环所有paths并提取工具
-      for (const path in openapi_schema['paths']) {
-        // 4.遍历对应path下的get和post方法
-        for (const method in openapi_schema['paths'][path]) {
-          if (['get', 'post'].includes(method)) {
-            // 5.提取工具信息，并校验是否存在name、description这两个字段
-            const tool = openapi_schema['paths'][path][method]
-            if ('operationId' in tool && 'description' in tool) {
-              available_tools.push({
-                name: tool?.operationId,
-                description: tool?.description,
-                method: method,
-                path: path,
-              })
-            }
-          }
-        }
-      }
-    }
-    return available_tools
-  } catch (e) {}
-  return []
-})
-
-// 加载更多数据
-const loadMoreData = async (init: boolean = false) => {
-  // 1.检测下是否需要加载数据
-  if (!init && paginator.current_page > paginator.total_page) return
-
-  // 2.加载更多数据并更新数据状态
-  try {
-    // 3.调用接口获取响应数据
-    loading.value = true
-    const resp = await getApiToolProvidersWithPage(
-      paginator.current_page,
-      paginator.page_size,
-      String(route.query?.search_word ?? ''),
-    )
-    const data = resp.data
-
-    // 4.更新分页器
-    paginator.current_page = data.paginator.current_page
-    paginator.page_size = data.paginator.page_size
-    paginator.total_page = data.paginator.total_page
-    paginator.total_record = data.paginator.total_record
-
-    // 5.判断是否存在更多数据
-    if (paginator.current_page <= paginator.total_page) {
-      paginator.current_page += 1
-    }
-
-    // 6.追加或者是覆盖数据
-    if (init) {
-      providers.splice(0, providers.length, ...data.list)
-    } else {
-      providers.push(...data.list)
-    }
-  } finally {
-    loading.value = false
-  }
+const resetForm = () => {
+  formRef.value?.resetFields()
+  Object.assign(form, emptyForm())
+  schemaError.value = ''
+  validatedSchema.value = ''
+  editingProviderId.value = ''
 }
-
-// 初始化加载数据
+const loadMoreData = () => loadApiToolProviders(false, String(route.query.search_word ?? ''))
 const initData = () => {
-  // 1.初始化分页器
-  paginator.current_page = 1
-  paginator.page_size = 20
-  paginator.total_page = 0
-  paginator.total_record = 0
-
-  // 2.调用数据加载完成初始化
-  loadMoreData(true)
+  selectedProviderId.value = ''
+  return loadApiToolProviders(true, String(route.query.search_word ?? ''))
+}
+const handleScroll = (event: UIEvent) => {
+  const { scrollTop, scrollHeight, clientHeight } = event.target as HTMLElement
+  if (scrollTop + clientHeight >= scrollHeight - 10) void loadMoreData()
 }
 
-// 滚动数据分页处理器
-const handleScroll = (event: UIEvent) => {
-  // 1.获取滚动距离、可滚动的最大距离、客户端/浏览器窗口的高度
-  const { scrollTop, scrollHeight, clientHeight } = event.target as HTMLElement
-
-  // 2.判断是否滑动到底部
-  if (scrollTop + clientHeight >= scrollHeight - 10) {
-    if (loading.value) {
-      return
+// 校验结果只应用于当前 Schema，完整规范由后端决定。
+const validateSchema = async (source = form.openapi_schema) => {
+  if (!source.trim()) return false
+  if (validatedSchema.value === source) return true
+  try {
+    await validateOpenAPISchema(source)
+    if (form.openapi_schema === source) {
+      validatedSchema.value = source
+      schemaError.value = ''
     }
-    loadMoreData()
+    return true
+  } catch (error) {
+    if (form.openapi_schema === source)
+      schemaError.value = error instanceof Error ? error.message : 'Schema 校验失败'
+    return false
   }
 }
 
-// 打开更新模态窗
 const handleUpdate = async () => {
+  const provider = selectedProvider.value
+  if (!provider || showUpdateModalLoading.value) return
+  showUpdateModalLoading.value = true
   try {
-    // 1.获取当前显示的provider_id
-    showUpdateModalLoading.value = true
-    const provider_id = providers[showIdx.value]['id']
-
-    // 2.根据拿到的id获取该工具提供商的详情信息
-    const resp = await getApiToolProvider(provider_id)
-    const data = resp.data
-
-    // 3.更新form表单数据
-    formRef.value?.resetFields()
+    const { data } = await getApiToolProvider(provider.id)
+    if (selectedProviderId.value !== provider.id || props.createType === 'tool') return
+    resetForm()
     form.fileList = [{ uid: '1', name: '插件图标', url: data.icon }]
     form.icon = data.icon
     form.name = data.name
     form.openapi_schema = data.openapi_schema
-    form.headers = data.headers
+    form.headers = (data.headers ?? []).map((header) => ({ ...header }))
+    editingProviderId.value = provider.id
+    showUpdateModal.value = true
+  } catch {
+    // 请求层已显示错误，不打开空的编辑表单。
   } finally {
     showUpdateModalLoading.value = false
   }
-
-  showUpdateModal.value = true
 }
 
-// 删除工具提供者处理器
+const handleCancel = () => {
+  if (submitLoading.value) return
+  resetForm()
+  emits('update-create-type', '')
+  showUpdateModal.value = false
+  if (route.query.create === '1') {
+    const { create, ...query } = route.query
+    void router.replace({ path: route.path, query })
+  }
+}
+
 const handleDelete = () => {
+  const providerId = editingProviderId.value
+  if (!providerId) return
   Modal.warning({
     title: '删除这个工具?',
     content: '删除工具是不可逆的。AI应用将无法再访问您的工具',
     hideCancel: false,
     onOk: async () => {
       try {
-        // 1.点击确定后向API接口发起请求
-        const provider_id = providers[showIdx.value]['id']
-        const resp = await deleteApiToolProvider(provider_id)
+        const resp = await deleteApiToolProvider(providerId)
         Message.success(resp.message)
-      } finally {
-        // 2.关闭模态窗+抽屉
         handleCancel()
-        showIdx.value = -1
-
-        // 3.重新加载数据
         await initData()
+        return true
+      } catch {
+        // 删除失败保留详情和表单，允许重试。
+        return false
       }
     },
   })
 }
 
-// 提交模态窗处理器
 const handleSubmit = async ({
-  values,
   errors,
 }: {
   values: Record<string, any>
   errors: Record<string, ValidatedError> | undefined
 }) => {
-  // 1.如果存在错误则直接结束
-  if (errors) return
-
+  if (errors || submitLoading.value) return
+  const providerId = editingProviderId.value
+  if (props.createType !== 'tool' && !providerId) return
+  // 明确构造接口请求，不发送 fileList 等 UI 状态。
+  const request: CreateApiToolProviderRequest = {
+    name: form.name.trim(),
+    icon: form.icon,
+    openapi_schema: form.openapi_schema,
+    headers: form.headers.map(({ key, value }) => ({ key: key.trim(), value })),
+  }
+  submitLoading.value = true
+  let saved = false
   try {
-    // 2.将模态窗按钮设置成加载状态，避免重复点击
-    submitLoading.value = true
-
-    // 3.根据不同的类型发起不同的请求
-    if (props.createType === 'tool') {
-      // 4.调用接口发起创建请求
-      const resp = await createApiToolProvider(values as CreateApiToolProviderRequest)
-      Message.success(resp.message)
-    } else if (showUpdateModal.value) {
-      // 5.调用接口发起更新API工具请求
-      const resp = await updateApiToolProvider(
-        providers[showIdx.value]['id'],
-        values as CreateApiToolProviderRequest,
-      )
-      Message.success(resp.message)
-    }
-
-    // 6.执行后续操作，涵盖隐藏模态窗、隐藏抽屉
-    handleCancel()
-    showIdx.value = -1
+    if (!(await validateSchema(request.openapi_schema))) return
+    const resp = providerId
+      ? await updateApiToolProvider(providerId, request)
+      : await createApiToolProvider(request)
+    Message.success(resp.message)
+    saved = true
+  } catch {
+    // 接口已提示失败，保留输入用于修改或重试。
   } finally {
     submitLoading.value = false
   }
-
-  // 7.重新加载数据
-  await initData()
-}
-
-// 取消显示模态窗处理器
-const handleCancel = () => {
-  // 1.重置整个表单的数据
-  formRef.value?.resetFields()
-
-  // 2.隐藏表单模态窗
-  emits('update-create-type', '')
-  showUpdateModal.value = false
-}
-
-// 页面DOM加载完毕初始化数据
-onMounted(async () => {
-  await initData()
-})
-
-// 监听路由query变化
-watch(
-  () => route.query?.search_word,
-  async () => {
+  if (saved) {
+    handleCancel()
     await initData()
+  }
+}
+
+watch(
+  () => props.createType,
+  (value) => {
+    if (value === 'tool') {
+      showUpdateModal.value = false
+      resetForm()
+    }
+  },
+  { immediate: true },
+)
+watch(
+  () => form.openapi_schema,
+  () => {
+    schemaError.value = ''
   },
 )
+onMounted(initData)
+watch(() => route.query.search_word, initData)
 </script>
 
 <template>
@@ -262,15 +204,12 @@ watch(
     <!-- 底部插件列表 -->
     <a-row :gutter="[20, 20]" class="flex-1">
       <!-- 有数据的UI状态 -->
-      <a-col
-        v-for="(provider, idx) in providers"
-        :key="provider.name"
-        :xs="24"
-        :sm="12"
-        :lg="8"
-        :xl="6"
-      >
-        <a-card hoverable class="cursor-pointer rounded-lg" @click="showIdx = idx">
+      <a-col v-for="provider in providers" :key="provider.id" :xs="24" :sm="12" :lg="8" :xl="6">
+        <a-card
+          hoverable
+          class="cursor-pointer rounded-lg"
+          @click="selectedProviderId = provider.id"
+        >
           <!-- 顶部提供商名称 -->
           <div class="flex items-center gap-3 mb-3">
             <!-- 左侧图标 -->
@@ -293,20 +232,28 @@ watch(
               <icon-user />
             </a-avatar>
             <div class="text-xs text-gray-400">
-              慕小课 · 编辑时间
+              创建时间
               {{ moment(provider.created_at * 1000).format('MM-DD HH:mm') }}
             </div>
           </div>
         </a-card>
       </a-col>
       <!-- 没数据的UI状态 -->
-      <a-col v-if="providers.length === 0" :span="24">
+      <a-col v-if="!loading && !loadError && providers.length === 0" :span="24">
         <a-empty
           description="没有可用的API插件"
           class="h-[400px] flex flex-col items-center justify-center"
         />
       </a-col>
     </a-row>
+    <a-alert v-if="loadError" type="error" class="my-4">
+      {{ loadError }}
+      <template #action
+        ><a-button size="small" @click="providers.length ? loadMoreData() : initData()"
+          >重试</a-button
+        ></template
+      >
+    </a-alert>
     <!-- 加载器 -->
     <a-row v-if="paginator.total_page >= 2">
       <!-- 加载数据中 -->
@@ -323,32 +270,32 @@ watch(
     </a-row>
     <!-- 卡片抽屉 -->
     <a-drawer
-      :visible="showIdx != -1"
+      :visible="!!selectedProvider"
       :width="350"
       :footer="false"
       title="工具详情"
       :drawer-style="{ background: '#F9FAFB' }"
-      @cancel="showIdx = -1"
+      @cancel="selectedProviderId = ''"
     >
-      <!-- 外部容器，用于判断showIdx是否为-1，为-1的时候就不显示 -->
-      <div v-if="showIdx != -1" class="">
+      <!-- 详情按提供者 ID 选择，避免列表刷新后索引错位 -->
+      <div v-if="selectedProvider" class="">
         <!-- 顶部提供商名称 -->
         <div class="flex items-center gap-3 mb-3">
           <!-- 左侧图标 -->
-          <a-avatar :size="40" shape="square" :image-url="providers[showIdx].icon" />
+          <a-avatar :size="40" shape="square" :image-url="selectedProvider.icon" />
           <!-- 右侧工具信息 -->
           <div class="flex flex-col">
             <div class="text-base text-gray-900 font-bold">
-              {{ providers[showIdx].name }}
+              {{ selectedProvider.name }}
             </div>
             <div class="text-xs text-gray-500 line-clamp-1">
-              提供商 {{ providers[showIdx].name }} · {{ providers[showIdx].tools.length }} 插件
+              提供商 {{ selectedProvider.name }} · {{ selectedProvider.tools.length }} 插件
             </div>
           </div>
         </div>
         <!-- 提供商的描述信息 -->
         <div class="leading-[18px] text-gray-500 mb-4">
-          {{ providers[showIdx].description }}
+          {{ selectedProvider.description }}
         </div>
         <!-- 编辑按钮 -->
         <a-button
@@ -365,12 +312,15 @@ watch(
         </a-button>
         <!-- 分隔符 -->
         <hr class="my-4" />
+        <a-alert v-if="selectedProvider.schemaError" type="warning" class="mb-4">{{
+          selectedProvider.schemaError
+        }}</a-alert>
         <!-- 提供者工具 -->
         <div class="flex flex-col gap-2">
-          <div class="text-xs text-gray-500">包含 {{ providers[showIdx].tools.length }} 个工具</div>
+          <div class="text-xs text-gray-500">包含 {{ selectedProvider.tools.length }} 个工具</div>
           <!-- 工具列表 -->
           <a-card
-            v-for="tool in providers[showIdx].tools"
+            v-for="tool in selectedProvider.tools"
             :key="tool.name"
             class="cursor-pointer flex flex-col rounded-xl"
           >
@@ -408,6 +358,8 @@ watch(
       :width="630"
       :visible="props.createType === 'tool' || showUpdateModal"
       hide-title
+      :mask-closable="!submitLoading"
+      :esc-to-close="!submitLoading"
       :footer="false"
       modal-class="rounded-xl"
       @cancel="handleCancel"
@@ -425,9 +377,15 @@ watch(
       </div>
       <!-- 中间表单 -->
       <div class="pt-6">
-        <a-form ref="formRef" :model="form" @submit="handleSubmit" layout="vertical">
+        <a-form
+          ref="formRef"
+          :model="form"
+          :disabled="submitLoading"
+          @submit="handleSubmit"
+          layout="vertical"
+        >
           <a-form-item
-            field="fileList"
+            field="icon"
             hide-label
             :rules="[{ required: true, message: '插件图标不能为空' }]"
           >
@@ -458,33 +416,44 @@ watch(
             field="name"
             label="插件名称"
             asterisk-position="end"
-            :rules="[{ required: true, message: '插件名称不能为空' }]"
+            :rules="[
+              { required: true, message: '插件名称不能为空' },
+              { maxLength: 30, message: '插件名称最多30字' },
+              {
+                validator: (value, callback) =>
+                  callback(value.trim() ? undefined : '插件名称不能为空'),
+              },
+            ]"
           >
             <a-input
               v-model="form.name"
               placeholder="请输入插件名称，确保名称含义清晰"
               show-word-limit
-              :max-length="60"
+              :max-length="30"
             />
           </a-form-item>
           <a-form-item
             field="openapi_schema"
             label="OpenAPI Schema"
+            :validate-status="schemaError ? 'error' : undefined"
+            :help="
+              schemaError ||
+              '使用 server、description、paths 格式；支持 GET/POST，参数类型为 str/int/float/bool。'
+            "
             asterisk-position="end"
-            :rules="[{ required: true, message: 'OpenAPI Schema不能为空' }]"
+            :rules="[
+              { required: true, message: 'OpenAPI Schema不能为空' },
+              {
+                validator: (value, callback) =>
+                  callback(value.trim() ? undefined : 'OpenAPI Schema不能为空'),
+              },
+            ]"
           >
             <a-textarea
               v-model="form.openapi_schema"
               :auto-size="{ minRows: 4, maxRows: 6 }"
               placeholder="在此处输入您的 OpenAPI Schema"
-              @blur="
-                async () => {
-                  if (form.openapi_schema.trim() !== '') {
-                    // 调用验证openapi_schema接口
-                    await validateOpenAPISchema(form.openapi_schema)
-                  }
-                }
-              "
+              @blur="validateSchema()"
             />
           </a-form-item>
           <a-form-item label="可用工具">
@@ -532,12 +501,37 @@ watch(
                     class="border-b last:border-0 border-gray-200"
                   >
                     <td class="p-2 pl-3">
-                      <a-form-item :field="`headers[${idx}].key`" hide-label class="m-0">
+                      <a-form-item
+                        :field="`headers[${idx}].key`"
+                        hide-label
+                        class="m-0"
+                        :rules="[
+                          { required: true, message: '请求头名称不能为空' },
+                          {
+                            validator: (value, callback) =>
+                              callback(
+                                value.trim() && !/[\r\n]/.test(value)
+                                  ? undefined
+                                  : '请求头名称不合法',
+                              ),
+                          },
+                        ]"
+                      >
                         <a-input v-model="header.key" placeholder="请输入请求头键名" />
                       </a-form-item>
                     </td>
                     <td class="p-2 pl-3">
-                      <a-form-item :field="`headers[${idx}].value`" hide-label class="m-0">
+                      <a-form-item
+                        :field="`headers[${idx}].value`"
+                        hide-label
+                        class="m-0"
+                        :rules="[
+                          {
+                            validator: (value, callback) =>
+                              callback(!/[\r\n]/.test(value) ? undefined : '请求头值不能包含换行'),
+                          },
+                        ]"
+                      >
                         <a-input v-model="header.value" placeholder="请输入请求头键值内容" />
                       </a-form-item>
                     </td>

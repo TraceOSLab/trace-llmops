@@ -42,6 +42,31 @@ export const draft = {
     outputs_config: { enable: false },
   },
 }
+// 与后端列表/详情响应一致：仅返回原始 Schema，不伪造 tools/description。
+export const toolSchema = {
+  server: 'https://example.test',
+  description: '测试服务说明',
+  paths: {
+    '/search': {
+      get: {
+        operationId: 'search',
+        description: '搜索测试资料',
+        parameters: [
+          { name: 'q', in: 'query', type: 'str', description: '搜索关键词', required: true },
+        ],
+      },
+    },
+    '/ping': { post: { operationId: 'ping', description: '服务健康检查' } },
+  },
+}
+export const apiProvider = {
+  id: '33333333-3333-4333-8333-333333333333',
+  name: '测试服务',
+  icon: 'http://127.0.0.1:5179/favicon.svg',
+  openapi_schema: JSON.stringify(toolSchema),
+  headers: [{ key: 'X-Test', value: 'local-only' }],
+  created_at: 1780000000,
+}
 export async function mock(page: Page, login = true) {
   let datasets: any[] = [
     {
@@ -88,7 +113,7 @@ export async function mock(page: Page, login = true) {
       updated_at: 1780000000,
     },
   ]
-  let providers: any[] = []
+  let providers: any[] = [structuredClone(apiProvider)]
   let conversations: any[] = []
   let apiKeys: any[] = [
     {
@@ -199,18 +224,54 @@ export async function mock(page: Page, login = true) {
       if (path.endsWith('/delete')) datasets = datasets.filter((d) => d.id !== id)
       else if (req.method() === 'POST') Object.assign(datasets.find((d) => d.id === id) || {}, body)
       else data = datasets.find((d) => d.id === id)
-    } else if (path === '/api-tools/validate-openapi-schema') data = {}
-    else if (path === '/api-tools') {
+    } else if (path === '/api-tools/validate-openapi-schema') {
+      try {
+        const schema = JSON.parse(body.openapi_schema)
+        if (!schema.server || !schema.description || !schema.paths) throw new Error()
+      } catch {
+        code = 'validate_error'
+        message = 'Schema 必须包含 server、description、paths'
+      }
+    } else if (path === '/api-tools') {
       if (req.method() === 'POST') {
         providers.push({
           id: 'provider-1',
-          ...body,
-          description: '测试工具',
-          tools: [],
+          name: body.name,
+          icon: body.icon,
+          openapi_schema: body.openapi_schema,
+          headers: body.headers,
           created_at: 1780000000,
         })
-        data = { id: 'provider-1' }
-      } else data = paged(providers)
+      } else
+        data = paged(
+          providers.filter((provider) =>
+            provider.name.includes(url.searchParams.get('search_word') || ''),
+          ),
+        )
+    } else if (path.startsWith('/api-tools/')) {
+      const [, , id, action, toolName] = path.split('/')
+      const provider = providers.find((item) => item.id === id)
+      if (action === 'delete') providers = providers.filter((item) => item.id !== id)
+      else if (action === 'tools') {
+        const schema = JSON.parse(provider.openapi_schema)
+        const tool: any = Object.values(schema.paths)
+          .flatMap((item: any) => Object.values(item))
+          .find((item: any) => item.operationId === toolName)
+        data = {
+          id: 'tool-1',
+          name: toolName,
+          description: tool.description,
+          inputs: (tool.parameters || []).map(({ in: location, ...input }: any) => input),
+          provider: {
+            id,
+            name: provider.name,
+            icon: provider.icon,
+            headers: provider.headers,
+            description: schema.description,
+          },
+        }
+      } else if (req.method() === 'POST') Object.assign(provider, body)
+      else data = provider
     } else if (path === '/auth/password-login')
       data = { access_token: 'test-local-only', expire_at: 9999999999 }
     else if (path === '/account')

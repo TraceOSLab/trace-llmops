@@ -48,6 +48,7 @@ dependencies = [
     "sqlalchemy==2.0.51",
     "tiktoken==0.11.0",
     "torch==2.10.0",
+    "torchvision==0.25.0",
     "transformers==4.57.3",
     "unstructured[csv,md,pdf,ppt,pptx,xlsx]==0.25.2",
     "weaviate-client==4.19.0",
@@ -68,5 +69,13 @@ name = "tuna"
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
 
+# Linux 云服务器使用 CPU 构建，避免下载 CUDA 运行库。
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://mirror.sjtu.edu.cn/pytorch-wheels/cpu/"
+explicit = true
+
 [tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }

@@ -62,4 +62,4 @@ HTTP 请求、Celery 任务、索引工作线程和 Agent 检索工具各自在�
 
 配置由 Flask Factory 从环境变量加载。只有 `.env.example` 可作为配置项参考；Codex 不应读取或输出 `.env`。当前尚未建立 CI，测试会继承本地配置，因此运行测试前要确认不会连接生产资源或调用付费模型。
 
-Python 依赖默认从 `llmops-api/pyproject.toml` 中的清华 PyPI 下载，`uv.lock` 同时锁定镜像 URL、版本和 SHA256。后端构建通过同一 PyPI 镜像安装 uv，APT 使用清华 Debian 镜像；前端构建的 npm/pnpm 使用腾讯云 npm 镜像。Docker 镜像加速属于服务器 Docker Engine 配置，模型下载镜像由后端镜像的 `HF_ENDPOINT` 设置；各层来源、缓存与服务器配置命令见 [生产部署说明](runbooks/production.md)。
+Python 依赖默认从 `llmops-api/pyproject.toml` 中的清华 PyPI 下载，`uv.lock` 同时锁定镜像 URL、版本和 SHA256。Linux 的 PyTorch 与 torchvision 使用上海交大 PyTorch CPU 镜像，保留主版本并移除 CUDA 运行库；其他平台继续使用默认 PyPI 来源。后端构建通过同一 PyPI 镜像安装 uv，APT 使用清华 Debian 镜像；前端构建的 npm/pnpm 使用腾讯云 npm 镜像。Docker 镜像加速属于服务器 Docker Engine 配置，模型下载镜像由后端镜像的 `HF_ENDPOINT` 设置；各层来源、缓存与服务器配置命令见 [生产部署说明](runbooks/production.md)。

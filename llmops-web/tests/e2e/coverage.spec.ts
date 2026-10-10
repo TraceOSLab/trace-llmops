@@ -178,9 +178,8 @@ test('create a custom OpenAPI tool and read it after reload', async ({ page }) =
   await page.getByPlaceholder('请输入插件名称，确保名称含义清晰').fill('本地测试工具')
   await page.getByPlaceholder('在此处输入您的 OpenAPI Schema').fill(
     JSON.stringify({
-      openapi: '3.0.0',
-      info: { title: 'Test', description: 'Test tool', version: '1.0' },
-      servers: [{ url: 'https://example.test' }],
+      server: 'https://example.test',
+      description: 'Test tool',
       paths: {
         '/ping': {
           get: {

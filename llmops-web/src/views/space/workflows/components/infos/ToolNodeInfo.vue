@@ -348,7 +348,13 @@ watch(form, () => emits('dirty', JSON.stringify(form.value) !== committedForm), 
             </a-tooltip>
           </div>
           <!-- 右侧绑定工具按钮 -->
-          <a-button type="text" size="mini" class="!text-gray-700" @click="handleShowToolsModal">
+          <a-button
+            aria-label="绑定插件"
+            type="text"
+            size="mini"
+            class="!text-gray-700"
+            @click="handleShowToolsModal"
+          >
             <template #icon>
               <icon-plus />
             </template>
@@ -593,6 +599,7 @@ watch(form, () => emits('dirty', JSON.stringify(form.value) !== committedForm), 
               type="text"
               class="!text-gray-700 ml-6"
               @click="() => (toolsModalVisible = false)"
+              aria-label="关闭插件选择"
             >
               <template #icon>
                 <icon-close />

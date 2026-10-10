@@ -86,7 +86,7 @@ const handleShowToolInfoModal = async (idx: number) => {
         name: api_tool.name,
         label: api_tool.name,
         description: api_tool.description,
-        inputs: builtin_tool.inputs,
+        inputs: api_tool.inputs,
         params: [],
       },
     }
@@ -246,7 +246,9 @@ const handleSelectTool = async (provider_idx: number, tool_idx: number) => {
   ) {
     // 8.4 删除关联的工具，筛选数据后更新
     const newTools = [...props.tools].filter((item) => {
-      return item.provider.id !== selectTool.provider.id && item.tool.name !== selectTool.tool.name
+      return !(
+        item.provider.id === selectTool.provider.id && item.tool.name === selectTool.tool.name
+      )
     })
     await handleUpdateDraftAppConfig(props.app_id, {
       tools: newTools.map((item) => {
@@ -304,7 +306,13 @@ const isToolSelected = (provider: any, tool: any) => {
         <div class="text-gray-700 font-bold">扩展插件</div>
       </template>
       <template #extra>
-        <a-button size="mini" type="text" class="!text-gray-700" @click.stop="handleShowToolsModal">
+        <a-button
+          aria-label="关联插件"
+          size="mini"
+          type="text"
+          class="!text-gray-700"
+          @click.stop="handleShowToolsModal"
+        >
           <template #icon>
             <icon-plus />
           </template>
@@ -339,6 +347,7 @@ const isToolSelected = (provider: any, tool: any) => {
           <div class="hidden group-hover:flex items-center gap-1 flex-shrink-0 ml-2">
             <a-button
               :loading="getApiToolLoading || getBuiltinToolLoading"
+              aria-label="工具设置"
               size="mini"
               type="text"
               class="!text-gray-700 rounded"
@@ -586,7 +595,13 @@ const isToolSelected = (provider: any, tool: any) => {
             <div class="text-lg font-bold text-gray-700">
               {{ toolsActivateType === 'api_tool' ? '自定义插件' : '内置插件' }}
             </div>
-            <a-button size="mini" type="text" class="!text-gray-700 ml-6">
+            <a-button
+              aria-label="关闭插件选择"
+              size="mini"
+              type="text"
+              class="!text-gray-700 ml-6"
+              @click="toolsModalVisible = false"
+            >
               <template #icon>
                 <icon-close />
               </template>

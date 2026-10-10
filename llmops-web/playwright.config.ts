@@ -11,6 +11,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   webServer: {
+    env: { VITE_API_BASE_URL: 'http://localhost:5000' },
     command: 'pnpm build && pnpm preview --host 127.0.0.1 --port 5179 --strictPort',
     url: 'http://127.0.0.1:5179',
     reuseExistingServer: false,

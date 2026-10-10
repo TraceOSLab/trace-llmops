@@ -85,6 +85,7 @@ Celery 的 `broker_url` 和 `result_backend` 使用 `REDIS_USERNAME`、`REDIS_PA
 | 下载内容 | 配置位置与来源 |
 | --- | --- |
 | Python 包 | `llmops-api/pyproject.toml` 默认清华 PyPI；`uv.lock` 的包下载地址也已切换 |
+| PyTorch / torchvision | Linux 使用上海交大 PyTorch CPU 镜像，分别锁定 `2.10.0+cpu` / `0.25.0+cpu`；其他平台沿用清华 PyPI |
 | uv 工具 | 后端 Dockerfile 通过清华 PyPI 安装固定 `uv==0.12.5`，不再拉取 GHCR 的 uv 镜像 |
 | Debian 系统包 | 后端 Dockerfile 的构建与运行阶段均使用清华 Debian 镜像 |
 | npm/pnpm 包与 pnpm 工具 | 前端 Dockerfile 的 `npm_config_registry` 与根目录 `pnpm-workspace.yaml` 的 `registry` 均设置为腾讯云 npm 镜像 |
@@ -92,7 +93,7 @@ Celery 的 `broker_url` 和 `result_backend` 使用 `REDIS_USERNAME`、`REDIS_PA
 | Hugging Face 模型 | 后端镜像设置 `HF_ENDPOINT=https://hf-mirror.com`，仍需显式关闭离线模式后下载模型 |
 | spaCy `en-core-web-sm` 模型 wheel | 保留固定版本的 GitHub 官方下载地址与 SHA256；PyPI 镜像不会代理这个 URL |
 
-uv 锁文件保留原有 254 条包版本记录和所有发行文件 SHA256。`--frozen` 直接使用新的镜像下载地址；不要手工只替换版本或校验值。后端 uv 与 pip 使用 BuildKit 缓存挂载，依赖层重新构建时可复用已下载的包。缓存不能减少首次所需的下载量；PyTorch/CUDA 依赖目前保留原配置。
+uv 锁文件由 `uv lock` 生成，记录下载地址、版本和 SHA256；`--frozen` 直接使用锁文件，不要手工修改校验值。Linux 采用 CPU 版 PyTorch 与 torchvision，移除 CUDA/NVIDIA/Triton 依赖，其他依赖版本不变。Linux x86_64、Python 3.11 的 torch 与 torchvision wheel 合计约 182 MiB，原 GPU 相关包约 3.8 GiB；这不是全部 Python 依赖或最终镜像的大小。此部署配置适用于没有 NVIDIA GPU 的服务器；需要 CUDA 时应重新配置 PyTorch 源并生成锁文件。后端 uv 与 pip 使用 BuildKit 缓存挂载，依赖层重新构建时可复用已下载的包。
 
 在腾讯云服务器上首次配置 Docker 加速时，从仓库根目录执行：
 
@@ -120,9 +121,20 @@ docker compose -f compose.prod.yaml up -d postgres redis weaviate
 docker compose -f compose.prod.yaml ps
 ```
 
-API/Celery 等待 PostgreSQL 和 Redis 健康检查通过；Weaviate 目前只等待容器启动，不代表其就绪。构建需要下载基础镜像、系统包和锁文件中的 Python/Node 依赖。后端按 `uv.lock` 安装，Linux x86_64 上的 PyTorch CUDA 依赖会使镜像较大。
+API/Celery 等待 PostgreSQL 和 Redis 健康检查通过；Weaviate 目前只等待容器启动，不代表其就绪。构建需要下载基础镜像、系统包和锁文件中的 Python/Node 依赖。后端按 `uv.lock` 安装 CPU 版 PyTorch，仍需安装文档解析、OCR、Office 和其他 Python 依赖，首次构建时间取决于网络、CPU 和磁盘速度。
 
 后端 Dockerfile 在构建阶段和运行阶段的 `apt-get update` 前，将 Debian 普通源和安全更新源切换到清华镜像，保留 Bookworm 套件和签名校验配置，不修改宿主机 APT 源。正在运行的构建不会自动加载修改；更新服务器上的 Dockerfile、`pyproject.toml` 和 `uv.lock` 后停止原构建，再执行上面的 build 命令，无需添加 `--no-cache`。前端 Dockerfile 的 npm 镜像变更也需要重新构建前端。
+
+如果服务器正在运行旧的 CUDA 依赖构建，先按 `Ctrl+C` 停止，更新服务器上的 `llmops-api/pyproject.toml` 和 `llmops-api/uv.lock`，再从仓库根目录执行：
+
+```bash
+sudo docker compose --progress plain -f compose.prod.yaml build llmops-api
+sudo docker compose -f compose.prod.yaml up -d --pull never
+```
+
+API 与 Celery 共用 `trace-llmops-api:0.1.0` 镜像，构建 API 一次即可供两者使用；已完成的前端镜像可复用。`--progress plain` 输出完整构建日志，不需要 `--no-cache`，也不要清理构建缓存。新日志应安装 `torch==2.10.0+cpu` 和 `torchvision==0.25.0+cpu`，不再出现 `nvidia-*` 或 `triton`。此命令假定其他服务镜像已在本地；缺少镜像时先执行上面的预拉取脚本。
+
+PyTorch CPU 源配置参考 [uv 官方说明](https://docs.astral.sh/uv/guides/integration/pytorch/) 与 [上海交大镜像说明](https://mirrors.sjtug.sjtu.edu.cn/docs/pytorch-wheels)。
 
 数据库沿用 `./volumes/postgres/data`，Redis 使用 `./volumes/redis/data`，Weaviate 使用 `./volumes/weaviate`。API/Celery 共享宿主机 `./volumes/app/storage` 日志/缓存目录和 `./volumes/app/embeddings` 模型目录。后端以 UID/GID `10001` 的非 root 用户运行；首次部署在运行应用命令前创建可写目录：
 

@@ -1,5 +1,17 @@
 # 本阶段验证记录
 
+## 2026-10-10 工具页接口对齐
+
+- `pnpm type-check`、`pnpm lint`、生产构建通过；构建仍有原有的 chunk 大小警告。
+- `pnpm test`：32 项通过，其中新增 11 项工具 Schema 与分页/竞态回归。
+- `PLAYWRIGHT_CHANNEL=chrome pnpm exec playwright test`：36 项通过，其中新增 8 项工具页与应用/工作流选择器回归。沙箱内 Chrome 启动失败后，在沙箱外运行本地 Mock 测试通过。
+- 工具夹具使用后端原始 `openapi_schema` 响应，不提供虚构的 `tools/description`；测试固定本地 API 地址并拦截外部请求。
+- 未进行真实账号写入或第三方工具调用；本地开发页的浏览器会话需登录，真实接口联调尚未验证。
+
+接口字段、表单格式与状态处理见 [自定义工具页说明](api-tools.md)。
+
+## 2026-09-29 初始前端验证
+
 验证日期：2026-09-29。执行目录：`llmops-web/`。
 
 | 检查 | 命令或方式 | 结果 |
