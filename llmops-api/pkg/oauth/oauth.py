@@ -13,6 +13,7 @@ from dataclasses import dataclass
 @dataclass
 class OAuthUserInfo:
     """OAuth用户基础信息 记录 id/name/emails"""
+
     id: str
     name: str
     email: str
@@ -21,9 +22,10 @@ class OAuthUserInfo:
 @dataclass
 class OAuth(ABC):
     """第三方授权认证 基础类"""
+
     client_id: str  # 客户端id
     client_secret: str  # 客户端密钥
-    redirect_uri: str  # 重定向uri
+    redirect_url: str  # 重定向uri
 
     @abstractmethod
     def get_provider(self) -> str:

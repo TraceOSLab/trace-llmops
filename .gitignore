@@ -23,6 +23,7 @@ node_modules/
 dist/
 build/
 docker/data
+volumes/
 
 # python
 tmp/*

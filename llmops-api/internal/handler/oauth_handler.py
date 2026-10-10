@@ -25,8 +25,8 @@ class OAuthHandler:
     def provider(self, provider_name: str):
         """根据第三方名称获取授权地址"""
         oauth = self.oauth_service.get_oauth_by_provider_name(provider_name)
-        redirect_uri = oauth.get_authorization_url()
-        return success_json({"redirect_uri": redirect_uri})
+        redirect_url = oauth.get_authorization_url()
+        return success_json({"redirect_url": redirect_url})
 
     def authorize(self, provider_name: str):
         """根据第三方名称+Code 获取授权凭证信息"""
