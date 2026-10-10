@@ -78,6 +78,41 @@ Celery 的 `broker_url` 和 `result_backend` 使用 `REDIS_USERNAME`、`REDIS_PA
 
 ## 2. 构建并启动数据服务
 
+### 下载镜像源
+
+项目已分别配置以下来源；APT、Python 包、Node 包和 Docker 镜像是独立的下载链路，设置其中一种不会加速其他下载。
+
+| 下载内容 | 配置位置与来源 |
+| --- | --- |
+| Python 包 | `llmops-api/pyproject.toml` 默认清华 PyPI；`uv.lock` 的包下载地址也已切换 |
+| uv 工具 | 后端 Dockerfile 通过清华 PyPI 安装固定 `uv==0.12.5`，不再拉取 GHCR 的 uv 镜像 |
+| Debian 系统包 | 后端 Dockerfile 的构建与运行阶段均使用清华 Debian 镜像 |
+| npm/pnpm 包与 pnpm 工具 | 前端 Dockerfile 的 `npm_config_registry` 与根目录 `pnpm-workspace.yaml` 的 `registry` 均设置为腾讯云 npm 镜像 |
+| Docker Hub 镜像 | 腾讯云服务器使用 `docker/daemon.json.example` 中的内网加速地址 |
+| Hugging Face 模型 | 后端镜像设置 `HF_ENDPOINT=https://hf-mirror.com`，仍需显式关闭离线模式后下载模型 |
+| spaCy `en-core-web-sm` 模型 wheel | 保留固定版本的 GitHub 官方下载地址与 SHA256；PyPI 镜像不会代理这个 URL |
+
+uv 锁文件保留原有 254 条包版本记录和所有发行文件 SHA256。`--frozen` 直接使用新的镜像下载地址；不要手工只替换版本或校验值。后端 uv 与 pip 使用 BuildKit 缓存挂载，依赖层重新构建时可复用已下载的包。缓存不能减少首次所需的下载量；PyTorch/CUDA 依赖目前保留原配置。
+
+在腾讯云服务器上首次配置 Docker 加速时，从仓库根目录执行：
+
+```bash
+sudo python3 scripts/configure-docker-mirror.py
+sudo dockerd --validate --config-file /etc/docker/daemon.json
+sudo systemctl restart docker
+sudo sh scripts/pull-production-images.sh
+```
+
+配置脚本将镜像地址合并到服务器 `/etc/docker/daemon.json`，保留原有其他配置和镜像地址，修改前生成权限为 `600` 的备份；再次执行不会重复添加。修改镜像地址只需编辑 `docker/daemon.json.example`。Docker 重启会影响已有容器，应在首次构建前或维护时执行。脚本没有被应用到开发电脑或远程服务器，需在服务器执行以上命令。
+
+预拉取脚本从 Compose 与两个 Dockerfile 读取镜像名称和版本，通过腾讯云内网代理拉取并保留原标签；其中包括 Weaviate 的 `cr.weaviate.io` 标签。API/web 的本地构建标签会跳过，任何拉取失败都会停止。此步骤也避免显式指定 `cr.weaviate.io` 的镜像绕过 Docker Hub 加速配置。内网地址只适用于腾讯云服务器，不要配置到普通本地电脑。
+
+默认 Docker builder 使用 Docker Engine 的镜像设置；自行创建的 `docker-container` BuildKit builder 还需单独配置 registry mirror。模型镜像不会代理 GitHub、tiktoken、NLTK 或 Unstructured 内置下载地址。spaCy 官方 wheel 如果下载超时，可在可联网的机器构建镜像后导入服务器，或使用已准备好的构建缓存。
+
+镜像地址依据 [清华 PyPI 说明](https://mirrors.tuna.tsinghua.edu.cn/help/pypi/)、[腾讯云软件源说明](https://cloud.tencent.com/document/product/213/8623) 与 [HF-Mirror 使用说明](https://hf-mirror.com/) 配置；Docker Hub 加速的范围见 [Docker 文档](https://docs.docker.com/docker-hub/image-library/mirror/)。实际下载速度以服务器网络为准。
+
+### 构建与启动
+
 ```bash
 docker compose -f compose.prod.yaml config --quiet
 docker compose -f compose.prod.yaml build llmops-api llmops-web
@@ -87,7 +122,7 @@ docker compose -f compose.prod.yaml ps
 
 API/Celery 等待 PostgreSQL 和 Redis 健康检查通过；Weaviate 目前只等待容器启动，不代表其就绪。构建需要下载基础镜像、系统包和锁文件中的 Python/Node 依赖。后端按 `uv.lock` 安装，Linux x86_64 上的 PyTorch CUDA 依赖会使镜像较大。
 
-后端 Dockerfile 在构建阶段和运行阶段的 `apt-get update` 前，将 Debian 普通源和安全更新源切换到清华镜像，保留 Bookworm 套件和签名校验配置。这只加速容器中的 APT 系统包下载，不影响宿主机软件源、Docker 基础镜像、uv 或 pnpm 依赖源。正在运行的构建不会自动加载修改；更新服务器上的 Dockerfile 后停止原构建，再执行上面的 build 命令，无需添加 `--no-cache`。下载速度以服务器实际结果为准。
+后端 Dockerfile 在构建阶段和运行阶段的 `apt-get update` 前，将 Debian 普通源和安全更新源切换到清华镜像，保留 Bookworm 套件和签名校验配置，不修改宿主机 APT 源。正在运行的构建不会自动加载修改；更新服务器上的 Dockerfile、`pyproject.toml` 和 `uv.lock` 后停止原构建，再执行上面的 build 命令，无需添加 `--no-cache`。前端 Dockerfile 的 npm 镜像变更也需要重新构建前端。
 
 数据库沿用 `./volumes/postgres/data`，Redis 使用 `./volumes/redis/data`，Weaviate 使用 `./volumes/weaviate`。API/Celery 共享宿主机 `./volumes/app/storage` 日志/缓存目录和 `./volumes/app/embeddings` 模型目录。后端以 UID/GID `10001` 的非 root 用户运行；首次部署在运行应用命令前创建可写目录：
 

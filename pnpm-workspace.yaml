@@ -1,6 +1,8 @@
 packages:
   - llmops-web
 
+registry: https://mirrors.cloud.tencent.com/npm/
+
 allowBuilds:
   esbuild: true
   vue-demi: true

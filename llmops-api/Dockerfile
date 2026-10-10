@@ -1,7 +1,4 @@
-FROM ghcr.io/astral-sh/uv:0.12.5 AS uv
-
 FROM python:3.11-slim-bookworm AS build
-COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
 ENV UV_LINK_MODE=copy \
   UV_PYTHON_DOWNLOADS=never \
@@ -13,14 +10,19 @@ RUN sed -i \
   && apt-get update \
   && apt-get install -y --no-install-recommends build-essential \
   && rm -rf /var/lib/apt/lists/*
+# Bootstrap uv through PyPI's mirror instead of pulling another image from GHCR.
+RUN --mount=type=cache,target=/root/.cache/pip \
+  pip install --index-url https://pypi.tuna.tsinghua.edu.cn/simple uv==0.12.5
 COPY llmops-api/pyproject.toml llmops-api/uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv \
+  uv sync --frozen --no-dev --no-install-project
 
 FROM python:3.11-slim-bookworm
 WORKDIR /app
 ENV PATH="/app/.venv/bin:$PATH" \
   PYTHONUNBUFFERED=1 \
   PYTHONDONTWRITEBYTECODE=1 \
+  HF_ENDPOINT=https://hf-mirror.com \
   HF_HOME=/app/storage/huggingface \
   TIKTOKEN_CACHE_DIR=/app/storage/tiktoken
 # 文档解析依赖：libmagic、PDF、OCR、Office；模型缓存另外准备。

@@ -61,3 +61,5 @@ HTTP 请求、Celery 任务、索引工作线程和 Agent 检索工具各自在�
 生产 Compose 中 `llmops-api` 与 `llmops-celery` 共用后端镜像和 `docker/entrypoint.sh`。两者通过 `env_file` 加载 `llmops-api/.env`，Celery 再加载 `llmops-api/.env.celery` 覆盖 `MODE=celery`。API 默认一个 Gunicorn `gthread` worker；Celery 默认一个 prefork 子进程。日志/运行缓存和本地嵌入模型分别绑定到共享宿主机目录 `volumes/app/storage` 与 `volumes/app/embeddings`。独立的 `llmops-nginx` 发布 80 与 443，将 HTTP 重定向到 `https://llmops.qiuyouyou.cn`，在 HTTPS 入口终止 TLS；证书从宿主机 `nginx/ssl/` 只读挂载。HTTPS 的 `/` 转发到前端静态服务 `llmops-web:3000`，`/api/` 去掉前缀后转发到 `llmops-api:5001`；前端构建时 API 地址固定为 `/api`。应用和数据服务只在 Compose 网络内通信。配置位置与启动步骤见 [生产部署说明](runbooks/production.md)。
 
 配置由 Flask Factory 从环境变量加载。只有 `.env.example` 可作为配置项参考；Codex 不应读取或输出 `.env`。当前尚未建立 CI，测试会继承本地配置，因此运行测试前要确认不会连接生产资源或调用付费模型。
+
+Python 依赖默认从 `llmops-api/pyproject.toml` 中的清华 PyPI 下载，`uv.lock` 同时锁定镜像 URL、版本和 SHA256。后端构建通过同一 PyPI 镜像安装 uv，APT 使用清华 Debian 镜像；前端构建的 npm/pnpm 使用腾讯云 npm 镜像。Docker 镜像加速属于服务器 Docker Engine 配置，模型下载镜像由后端镜像的 `HF_ENDPOINT` 设置；各层来源、缓存与服务器配置命令见 [生产部署说明](runbooks/production.md)。

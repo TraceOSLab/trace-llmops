@@ -1,6 +1,7 @@
 FROM node:24-alpine AS build
 
 WORKDIR /app
+ENV npm_config_registry=https://mirrors.cloud.tencent.com/npm/
 RUN npm install --global pnpm@11.10.0
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
