@@ -146,7 +146,21 @@ sudo install -d -m 0755 -o 10001 -g 10001 volumes/app/storage volumes/app/embedd
 
 ## 3. 准备嵌入模型并迁移数据库
 
-现有 EmbeddingsService 只加载本地模型。首次索引前下载完整模型缓存；以下命令不调用付费模型：
+**首次使用助手聊天、知识库检索或文档索引前，必须准备完整的嵌入模型缓存。** 模型不提交 Git，Docker 构建也会排除本地 `llmops-api/internal/core/embeddings/`。克隆工程、构建镜像和启动服务都不会自动下载模型。
+
+`EmbeddingsService` 设置了 `local_files_only=True`，只加载本地文件；模型采用懒加载，因此 API/Celery 启动成功不代表模型可用。需要准备两个仓库：
+
+- `Alibaba-NLP/gte-multilingual-base`：模型权重、配置和分词器。
+- `Alibaba-NLP/new-impl`：模型配置引用的自定义 Python 实现。只下载其中一个仓库仍可能加载失败。
+
+生产 Compose 将宿主机目录挂载给 API 和 Celery：
+
+| 位置 | 模型缓存目录 |
+| --- | --- |
+| 服务器仓库根目录下 | `volumes/app/embeddings/` |
+| 容器内，代码实际读取的位置 | `/app/internal/core/embeddings/` |
+
+完成上一步的目录权限准备后，在服务器仓库根目录依次执行以下两条命令。命令暂时关闭离线模式以允许下载，不调用付费模型；下载结果通过挂载保留在宿主机，`--rm` 删除临时容器不会删除模型：
 
 ```bash
 docker compose -f compose.prod.yaml run --rm --no-deps \
@@ -160,7 +174,33 @@ docker compose -f compose.prod.yaml run --rm --no-deps \
   --cache-dir /app/internal/core/embeddings
 ```
 
-无法联网时，将完整 Hugging Face 缓存导入同一卷，包括 snapshots、blobs 和自定义实现。Dockerfile 安装了 PDF/OCR/Office 系统工具，但 tiktoken、NLTK 或 Unstructured 仍可能首次下载资源，不能将容器启动成功当成所有文档格式均已验证。
+下载成功后，服务器目录应包含：
+
+```text
+volumes/app/embeddings/
+├── models--Alibaba-NLP--gte-multilingual-base/
+│   ├── blobs/
+│   ├── refs/
+│   └── snapshots/
+└── models--Alibaba-NLP--new-impl/
+    ├── blobs/
+    ├── refs/
+    └── snapshots/
+```
+
+无法联网时，也可以将本地 `llmops-api/internal/core/embeddings/` 的完整内容复制到服务器 `volumes/app/embeddings/`，保留两个仓库的 `snapshots`、`blobs`、`refs` 和符号链接，避免多套一层 `embeddings/`。导入后确保文件对 UID/GID `10001` 可读写。复制到服务器源码中的 `llmops-api/internal/core/embeddings/` 不会填充当前 Compose 挂载的目录。
+
+如果助手聊天出现 `We couldn't connect to 'https://hf-mirror.com'`，同时堆栈包含 `Cannot find the requested files in the disk cache and outgoing traffic has been disabled`，先检查模型缓存是否完整、目录是否正确、文件权限和符号链接是否可读。这个错误表示离线加载找不到所需文件，不能仅凭镜像地址判断网络故障；只有下载命令本身连接失败时，才继续排查服务器网络。
+
+已启动服务后补充模型或修正挂载、环境配置，需要重新创建 API/Celery，让模型路径和配置重新读取：
+
+```bash
+docker compose -f compose.prod.yaml up -d --force-recreate llmops-api llmops-celery
+```
+
+再验证助手聊天或文档索引；真实业务可能调用付费模型。若浏览器出现 Werkzeug Debugger 页面，检查服务器后端配置是否为 `FLASK_ENV=production`、`FLASK_DEBUG=0`，修改后执行上面的重新创建命令。
+
+Dockerfile 安装了 PDF/OCR/Office 系统工具，但 tiktoken、NLTK 或 Unstructured 仍可能首次下载资源，不能将容器启动成功当成所有文档格式均已验证。
 
 PostgreSQL 空库初始化会执行 `docker/postgres/init.sql`；已有数据库不会重跑初始化脚本。数据库就绪后确认 UUID 扩展，再执行一次迁移：
 

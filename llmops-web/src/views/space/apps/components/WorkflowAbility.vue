@@ -11,7 +11,7 @@ onMounted(async () => {
   while (page <= total) {
     const res = await getWorkflowsWithPage({
       current_page: page,
-      page_size: 100,
+      page_size: 50,
       status: 'published',
     })
     workflows.value.push(...res.data.list)

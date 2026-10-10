@@ -30,6 +30,7 @@ docker compose -f compose.dev.yaml up -d
 ## 常用入口
 
 - 完整的初始化、F5、Celery、数据库迁移和排障说明：[本地开发手册](../docs/runbooks/development.md)
+- Docker 生产部署、首次模型下载和模型缺失排查：[生产部署说明](../docs/runbooks/production.md)
 - 系统组件和后端分层：[架构说明](../docs/architecture.md)
 - Agent SSE 当前契约：[流式事件契约](../docs/contracts/agent-stream-events.md)
 - Codex 在本仓库中的协作方式：[Codex 协作方式](../docs/codex-workflow.md)
@@ -67,11 +68,11 @@ uv pip check
 
 文档解析还依赖操作系统工具。为完整支持 PDF、图片和旧版 Office 文件，请根据系统安装 `libmagic`、Poppler、Tesseract 和 LibreOffice；这些工具不由 uv 管理。
 
-嵌入模型也不是 Python 包，不会进入 `uv.lock`，并且模型缓存目录不会提交到 Git。首次使用本地嵌入前需要联网执行：
+嵌入模型也不是 Python 包，不会进入 `uv.lock`，并且模型缓存目录不会提交到 Git。**克隆工程、安装依赖或启动服务不会自动下载模型；首次使用助手聊天、知识库检索或文档索引前必须准备模型。** 本地开发时，在 `llmops-api/` 目录联网执行以下两条命令，分别下载模型及其自定义实现：
 
 ```bash
 uv run hf download Alibaba-NLP/gte-multilingual-base --cache-dir internal/core/embeddings
 uv run hf download Alibaba-NLP/new-impl --cache-dir internal/core/embeddings
 ```
 
-应用以 `local_files_only` 模式加载模型，因此部署或离线开发环境必须提前准备这两个缓存。
+应用以 `local_files_only=True` 模式加载模型，缺少文件时会报错，不会自动补下载。Docker 生产部署使用服务器的 `volumes/app/embeddings/`，具体下载命令和目录映射见 [生产部署说明第 3 步](../docs/runbooks/production.md#3-准备嵌入模型并迁移数据库)。

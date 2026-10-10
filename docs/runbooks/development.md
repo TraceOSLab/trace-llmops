@@ -174,14 +174,14 @@ uv pip check
 
 当前文档解析代码支持 CSV、Markdown、PDF、PPT/PPTX 和 XLS/XLSX，相应 Unstructured extras 已写入项目依赖。Unstructured 还建议为完整的 PDF、图片和旧版 Office 支持安装 `libmagic`、Poppler、Tesseract 和 LibreOffice；它们是操作系统依赖，不会出现在 `uv.lock` 中。
 
-本地嵌入模型同样不属于 Python 依赖，`internal/core/embeddings/` 也被 Git 忽略。首次使用文档索引前需要联网把模型及其自定义实现下载到应用使用的缓存目录：
+本地嵌入模型同样不属于 Python 依赖，`internal/core/embeddings/` 也被 Git 忽略。克隆工程和安装依赖不会带上模型；首次使用助手聊天、知识库检索或文档索引前，必须准备模型及其自定义实现。在 `llmops-api/` 目录联网执行以下两条命令：
 
 ```bash
 uv run hf download Alibaba-NLP/gte-multilingual-base --cache-dir internal/core/embeddings
 uv run hf download Alibaba-NLP/new-impl --cache-dir internal/core/embeddings
 ```
 
-`EmbeddingsService` 当前设置了 `local_files_only=True`，所以运行期间不会自动补下载；部署和离线环境应在启动 Worker 前完成模型准备。
+`EmbeddingsService` 当前设置了 `local_files_only=True`，所以运行期间不会自动补下载。模型采用懒加载，服务启动成功不代表模型已经准备好。Docker 生产部署的缓存目录和下载命令见 [生产部署说明第 3 步](production.md#3-准备嵌入模型并迁移数据库)。
 
 ## 数据库迁移
 
